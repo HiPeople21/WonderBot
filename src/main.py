@@ -17,12 +17,21 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = Flask(__name__)
+app = Flask(
+    __name__,
+    static_folder="static",
+)
 API_KEY = os.getenv("PPLX_API_KEY")
+
 
 @app.route("/", methods=["GET", "POST"])
 def home():
     return render_template("index.html")
+
+
+@app.route("/search", methods=["GET", "POST"])
+def search():
+    return render_template("search.html")
 
 
 if __name__ == "__main__":
