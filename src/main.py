@@ -12,7 +12,7 @@ API_KEY = os.getenv("PPLX_API_KEY")
 
 @app.route("/home", methods=['GET', 'POST'])
 def home():
-    return render_template()
+    return render_template("home.html")
 
 if __name__=="__main__":
     app.run(host='0.0.0.0', debug=True)
