@@ -20,13 +20,6 @@ load_dotenv()
 app = Flask(__name__)
 API_KEY = os.getenv("PPLX_API_KEY")
 
-<<<<<<< HEAD
-@app.route("/", methods=['GET', 'POST'])
-def home():
-    return render_template("home.html")
-=======
->>>>>>> 2688b4f9a498fef2b7e0d5e9190b6c0d2e73567f
-
 @app.route("/", methods=["GET", "POST"])
 def home():
     return render_template("index.html")
