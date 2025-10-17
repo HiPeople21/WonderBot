@@ -1,0 +1,17 @@
+#bg-vid {
+    width: 100vw;
+    height: 100vh;
+}
+
+
+span.icon img {
+    height: 75%;
+    width: 75%;
+}
+
+#header .logo .icon {
+    display: grid;
+    place-items: center;
+    height: 100%;
+    width: 100%;
+}
