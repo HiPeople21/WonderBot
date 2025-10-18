@@ -1,234 +1,211 @@
-import random
-import os
-import sqlite3
-from datetime import datetime
+import os, json, requests
 from dotenv import load_dotenv
-from perplexity import Perplexity
-import subprocess
-import json
-from urllib.parse import urlencode, quote
-
 load_dotenv()
 
+PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
-AMADEUS_API_KEY = os.getenv("AMADEUS_API_KEY")
-AMADEUS_SECRET_KEY = os.getenv("AMADEUS_SECRET_KEY")
-FLIGHT_SOURCES = os.getenv("FLIGHT_SOURCES", "").split(",")
 
-client = Perplexity()
-
-# ------------------------- link helpers -------------------------
-
-def kayak_link(origin, destination, depart_date, return_date=None, adults=1, cabin="economy", currency="USD"):
-    # https://www.kayak.com/flights/ORIG-DEST/DEPART[/RETURN]?sort=price_a&fs=cabin=e&adults=2&cc=USD
-    cabin_map = {"economy":"e","premium":"p","business":"b","first":"f"}
-    base = f"https://www.kayak.com/flights/{origin}-{destination}/{depart_date}"
-    if return_date:
-        base += f"/{return_date}"
-    qs = f"?sort=price_a&fs=cabin={cabin_map.get(cabin.lower(),'e')}&adults={adults}&cc={currency}"
-    return base + qs
-
-# ------------------------- small utilities -------------------------
-
-AMAD_CABIN = {
-    "economy": "ECONOMY",
-    "premium": "PREMIUM_ECONOMY",
-    "business": "BUSINESS",
-    "first": "FIRST",
-}
-
-def _iso_to_date(iso_str: str) -> str:
-    # accepts "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM"
-    d = iso_str.split("T", 1)[0]
-    datetime.strptime(d, "%Y-%m-%d")  # validate
-    return d
-
-# Minimal IATA mapping for common cities (extend as needed)
-IATA_CITY = {
-    "london": "LON", "tokyo": "TYO", "new york": "NYC", "los angeles": "LAX",
-    "paris": "PAR", "singapore": "SIN", "hong kong": "HKG"
-}
-
-def _to_iata(s: str) -> str:
-    if not s:
-        return s
-    s = s.strip()
-    if len(s) == 3 and s.isalpha():
-        return s.upper()
-    return IATA_CITY.get(s.lower(), s.upper())  # fallback: return upper as-is
-
-# ------------------------- main function -------------------------
-
-def find_flights(departure_city, arrival_city, departure_datetime, return_date, budget, currency='$',
-                 passengers=1, cabin_class="economy"):
-    """
-    Searches Amadeus (via curl/subprocess), returns structured offers with:
-    - price, validating airline, legs (with flight numbers),
-    - and corresponding link to book.
-    """
-
-    # ---- OAuth token
-    token_cmd = [
-        "curl", "-s", "-X", "POST",
-        "https://test.api.amadeus.com/v1/security/oauth2/token",
-        "-H", "Content-Type: application/x-www-form-urlencoded",
-        "-d", f"grant_type=client_credentials&client_id={AMADEUS_API_KEY}&client_secret={AMADEUS_SECRET_KEY}"
-    ]
-    token_out = subprocess.run(token_cmd, capture_output=True, text=True)
-    access_token = json.loads(token_out.stdout)["access_token"]
-
-    # ---- Inputs → Amadeus params
-    origin = _to_iata(departure_city)     # accept IATA or city
-    destination = _to_iata(arrival_city)  # accept IATA or city
-    depart_date = _iso_to_date(departure_datetime)
-    ret_date = _iso_to_date(return_date) if return_date else None
-    adults = int(passengers)
-    currency_code = "USD"  # keep USD for hackathon simplicity
-    travel_class = AMAD_CABIN.get(cabin_class.lower(), "ECONOMY")
-    max_results = 10
-
-    # ---- Flight Offers search (subprocess curl)
-    base_url = "https://test.api.amadeus.com/v2/shopping/flight-offers"
-    q = (
-        f"?originLocationCode={origin}"
-        f"&destinationLocationCode={destination}"
-        f"&departureDate={depart_date}"
-        f"{f'&returnDate={ret_date}' if ret_date else ''}"
-        f"&adults={adults}"
-        f"&currencyCode={currency_code}"
-        f"&travelClass={travel_class}"
-        f"&max={max_results}"
-    )
-    result_cmd = [
-        "curl", "-s", "-X", "GET", base_url + q,
-        "-H", f"Authorization: Bearer {access_token}"
-    ]
-    result = subprocess.run(result_cmd, capture_output=True, text=True)
-
+def _json_sanitize(s: str):
     try:
-        payload = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return {"error": "Failed to decode JSON from Amadeus", "raw": result.stdout}
+        return json.loads(s)
+    except Exception:
+        for a,b in [("{","}"),("[","]")]:
+            i, j = s.find(a), s.rfind(b)
+            if i != -1 and j != -1 and j > i:
+                try: return json.loads(s[i:j+1])
+                except Exception: pass
+    return None
 
-    data = payload.get("data", [])
-    dicts = payload.get("dictionaries", {})
-    carriers = dicts.get("carriers", {})
-    aircraft = dicts.get("aircraft", {})
+def _assert_api_key():
+    if not PERPLEXITY_API_KEY or PERPLEXITY_API_KEY.strip() == "":
+        raise RuntimeError("PERPLEXITY_API_KEY is missing or empty")
 
-    items = []
-    for offer in data:
-        price_total = float(offer["price"]["grandTotal"])
-        validating = (offer.get("validatingAirlineCodes") or [None])[0]
-        itineraries = offer.get("itineraries", [])
-        if not itineraries:
-            continue
+def _call_perplexity(messages, *, temperature=0.2, max_tokens=8000, debug=True):
+    _assert_api_key()
+    headers = {
+        "accept": "application/json",
+        "authorization": f"Bearer {PERPLEXITY_API_KEY}",
+        "content-type": "application/json",
+    }
+    payload = {
+        "model": "sonar-pro",                # try "sonar" if you get 400 / access errors
+        "messages": messages,
+        "temperature": temperature,
+        "top_p": 0.9,
+        "max_tokens": max_tokens,            # raise cap to reduce truncation
+        "stream": False,
+        "enable_search_classifier": True,
+        "return_search_results": False,
+    }
+    try:
+        r = requests.post(PERPLEXITY_API_URL, json=payload, headers=headers, timeout=90)
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"HTTP request failed: {e}")
 
-        # determine O&D / dates from first itinerary
-        out_segments = itineraries[0].get("segments", [])
-        if not out_segments:
-            continue
-        o_iata = out_segments[0]["departure"]["iataCode"]
-        d_iata = out_segments[-1]["arrival"]["iataCode"]
-        d_date = out_segments[0]["departure"]["at"][:10]
+    if debug:
+        print(f"[perplexity] status={r.status_code}")
+        # print only first 800 chars to avoid flooding logs
+        print(f"[perplexity] body head: {r.text[:800]}")
 
-        r_date = None
-        if len(itineraries) > 1 and itineraries[1].get("segments"):
-            r_date = itineraries[1]["segments"][0]["departure"]["at"][:10]
+    # Explicitly raise HTTP errors so you see body in console
+    try:
+        r.raise_for_status()
+    except requests.HTTPError as he:
+        raise RuntimeError(f"API error {r.status_code}: {r.text}") from he
 
-        # legs with flight numbers
-        legs = []
-        for itin in itineraries:
-            segs = []
-            for s in itin.get("segments", []):
-                cc = s["carrierCode"]
-                segs.append({
-                    "from": s["departure"]["iataCode"],
-                    "to": s["arrival"]["iataCode"],
-                    "depart": s["departure"]["at"],
-                    "arrive": s["arrival"]["at"],
-                    "carrier": carriers.get(cc, cc),
-                    "flight_number": f"{cc}{s['number']}",
-                    "aircraft": aircraft.get(s["aircraft"]["code"], s["aircraft"]["code"]),
-                    "stops": s.get("numberOfStops", 0),
-                })
-            legs.append(segs)
+    data = r.json()
+    # Defensive: ensure choices exist
+    if not isinstance(data, dict) or "choices" not in data or not data["choices"]:
+        raise RuntimeError(f"Unexpected response structure: {json.dumps(data)[:800]}")
+    content = data["choices"][0].get("message", {}).get("content", "")
+    if not content:
+        raise RuntimeError(f"No content returned: {json.dumps(data)[:800]}")
+    return content
 
-        # builds kayak link
-        link_ky = kayak_link(o_iata, d_iata, d_date, r_date, adults=adults, cabin=cabin_class, currency=currency_code)
+# ---------------- textbook generator (uses the robust caller) ----------------
 
-        items.append({
-            "price_total": price_total,
-            "currency": offer["price"]["currency"],
-            "validating_airline": carriers.get(validating, validating),
-            "origin": o_iata,
-            "destination": d_iata,
-            "depart_date": d_date,
-            "return_date": r_date,
-            "link": link_ky,
-            "itinerary": legs,
-            "raw_id": offer.get("id"),
-        })
-
-    items.sort(key=lambda x: x["price_total"])
-    return items
-
-# ---- Example call (kept from your script) ------------------------------------
-# results = find_flights("LHR", "HND", "2025-11-03T05:00", "2025-11-07T16:00", 10000, passengers=2)
-# for r in results[:3]:
-#     print(f"${r['price_total']} | {r['origin']}→{r['destination']} {r['depart_date']}")
-#     print("KY :", r["link"])
-#     print()
-
-# Make the API call
-# completion = client.chat.completions.create(
-#     model="sonar-pro",
-#     messages=[
-#         {"role": "user", "content": "https://www.kayak.com/flights/LHR-HND/2025-11-03/2025-11-07?sort=price_a&fs=cabin%3De&adults=2&cc=USD&attempt=1&lastms=1760739758128 what flights are on this page and what are their prices"}
-#     ]
-# )
-
-# # Print the AI's response
-# print(completion.choices[0].message.content)
-
-import requests
-
-# API configuration
-API_URL = "https://api.perplexity.ai/chat/completions"
-
-headers = {
-    "accept": "application/json",
-    "authorization": f"Bearer {PERPLEXITY_API_KEY}",
-    "content-type": "application/json"
+_SCHEMA_HINT = {
+    "type": "object",
+    "required": ["title","learning_path","sections","summary","estimated_total_read_time_minutes"],
+    "properties": {
+        "title": {"type":"string"},
+        "learning_path": {"type":"array","items":{"type":"string"}},
+        "sections": {
+            "type":"array",
+            "items":{
+                "type":"object",
+                "required":[
+                    "title","overview","key_points","formulas",
+                    "diagram","worked_example","common_pitfalls","mini_quiz"
+                ],
+                "properties":{
+                    "title":{"type":"string"},
+                    "overview":{"type":"string"},
+                    "key_points":{"type":"array","items":{"type":"string"}},
+                    "formulas":{"type":"array","items":{"type":"string"}},
+                    "derivations":{"type":"string"},
+                    "diagram":{"type":"object","required":["caption","instructions"],
+                               "properties":{"caption":{"type":"string"},"instructions":{"type":"string"}}},
+                    "worked_example":{"type":"object","required":["prompt","steps","answer"],
+                                      "properties":{"prompt":{"type":"string"},
+                                                    "steps":{"type":"array","items":{"type":"string"}},
+                                                    "answer":{"type":"string"}}},
+                    "common_pitfalls":{"type":"array","items":{"type":"string"}},
+                    "mini_quiz":{"type":"array","items":{"type":"object","required":["q","a"],
+                                  "properties":{"q":{"type":"string"},"a":{"type":"string"}}}}
+                }
+            }
+        },
+        "summary":{"type":"string"},
+        "estimated_total_read_time_minutes":{"type":"integer"}
+    }
 }
 
-# Query that benefits from search classifier
-user_query = '''
-You are a helpful AI assistant.
+_SYSTEM_MSG = (
+    "You are a master educator. Write like a concise textbook: clean, precise, structured. "
+    "Short paragraphs (plain text), minimal jargon, clear notation. "
+    "No citations, links, or markdown. Return ONLY valid JSON."
+)
 
-Rules:
-1. Provide only the final answer. It is important that you do not include any explanation on the steps below.
-2. Do not show the intermediate steps information.
+def find_textbook_packet(topic: str, subtopics: list[str], grade_level: str,
+                         max_sections: int = 6, quiz_per_section: int = 3, debug=True) -> dict:
+    subtopics_txt = ", ".join(subtopics) if subtopics else "—"
+    user_msg = f"""
+Create a condensed, concise textbook-style packet for a {grade_level} student.
 
-Steps:
-1. Make sure the price is within the budget.
-2. Make sure to return relevant flight details in structured format.
-3. Make sure all of the flight info satisfies my prompt.
-4. You do not need to return the link to book the flight, the most important thing to get right is the price and flight number.
-4. Return the answer in the following format:
-   1. Price with currency symbol.
-   2. Date and time of departure and arrival.
-   3. Airline name and flight number.
-   4. If the flight requires a layover, include the layover city and duration.
-   
-Question: What flights can I get from London to Tokyo departing on November 3, 2025 for 2 adults in economy class within a budget of $2,000?'''
+Primary topic: "{topic}"
+Focus subtopics (include and integrate): {subtopics_txt}
 
-payload = {
-    "model": "sonar-pro",
-    "messages": [{"role": "user", "content": user_query}],
-    "stream": False,
-}
+Constraints and style:
+- Clarity and density. Short paragraphs (plain text), precise definitions, minimal fluff.
+- Logical learning order (prerequisites first).
+- Each section: 120–220 word overview, 3–6 key points, essential formulas (LaTeX ok),
+  1 worked example with steps, 1 small diagram described by text (caption + drawing instructions),
+  2–4 common pitfalls, and {quiz_per_section} mini-quiz Q/A.
+- Keep derivations brief (5–10 lines) only when essential.
+- DO NOT include citations, URLs, references, or markdown.
+- Keep total number of sections ≤ {max_sections} by merging closely related subtopics.
 
-response = requests.post(API_URL, json=payload, headers=headers)
-for result in response.json()['search_results']:
-    print(result)
-    print()
+Output:
+Return ONLY valid JSON matching this schema (no prose outside JSON):
+{json.dumps(_SCHEMA_HINT)}
+""".strip()
+
+    content = _call_perplexity(
+        [{"role": "system", "content": _SYSTEM_MSG},
+         {"role": "user", "content": user_msg}],
+        max_tokens=8000,
+        debug=debug
+    )
+    parsed = _json_sanitize(content)
+    if not parsed:
+        # fail-soft: small skeleton so downstream doesn’t crash
+        return {
+            "title": f"{topic} — Learning Packet",
+            "learning_path": subtopics or [topic],
+            "sections": [{
+                "title":"Overview",
+                "overview":"Content unavailable due to JSON parse or token limit.",
+                "key_points":[],
+                "formulas":[],
+                "derivations":"",
+                "diagram":{"caption":"—","instructions":"—"},
+                "worked_example":{"prompt":"—","steps":[],"answer":"—"},
+                "common_pitfalls":[],
+                "mini_quiz":[]
+            }],
+            "summary":"Generation failed softly; check API logs.",
+            "estimated_total_read_time_minutes": 3
+        }
+    return parsed
+
+def textbook_json_to_markdown(packet: dict) -> str:
+    md = [f"# {packet.get('title','Learning Packet')}\n"]
+    md.append(f"**Estimated reading time:** {packet.get('estimated_total_read_time_minutes','~')} minutes\n")
+    lp = packet.get("learning_path") or []
+    if lp: md.append("**Learning order:** " + " → ".join(lp) + "\n")
+    for section in packet.get("sections", []):
+        md.append(f"## {section.get('title','Section')}\n")
+        if section.get("overview"): md.append(section["overview"] + "\n")
+        if section.get("key_points"):
+            md.append("**Key points:**")
+            for p in section["key_points"]: md.append(f"- {p}")
+        if section.get("formulas"):
+            md.append("**Formulas:**")
+            for f in section["formulas"]: md.append(f"- `{f}`")
+        if section.get("derivations"):
+            md.append("**Sketch derivation:**"); md.append(section["derivations"])
+        if section.get("worked_example"):
+            ex = section["worked_example"]; md.append("\n**Worked Example:**")
+            if ex.get("prompt"): md.append(f"*{ex['prompt']}*")
+            for step in ex.get("steps", []): md.append(f"  - {step}")
+            if ex.get("answer"): md.append(f"**Answer:** {ex['answer']}\n")
+        if section.get("diagram"):
+            d = section["diagram"]; md.append("**Diagram:** " + d.get("caption",""))
+            if d.get("instructions"): md.append("Instructions: " + d["instructions"])
+        if section.get("common_pitfalls"):
+            md.append("**Common Pitfalls:**")
+            for p in section["common_pitfalls"]: md.append(f"- {p}")
+        if section.get("mini_quiz"):
+            md.append("**Quick Quiz:**")
+            for qa in section["mini_quiz"]:
+                md.append(f"- {qa.get('q','')}  \n  **Ans:** {qa.get('a','')}")
+        md.append("\n---\n")
+    if packet.get("summary"): md.append("## Summary\n" + packet["summary"])
+    return "\n".join(md)
+
+# ---------------- quick smoke test ----------------
+if __name__ == "__main__":
+    try:
+        pkt = find_textbook_packet(
+            topic="Vectors",
+            subtopics=["Gram-Schmidt process", "Vector spaces"],
+            grade_level="undergraduate",
+            max_sections=6,
+            quiz_per_section=3,
+            debug=True     # prints HTTP status and body head
+        )
+        md = textbook_json_to_markdown(pkt)
+        print(md)
+    except Exception as e:
+        print("\n[FATAL]", e)
