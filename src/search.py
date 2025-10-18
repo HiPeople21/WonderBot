@@ -761,15 +761,19 @@ def search_topic(topic, subtopics, grade_level, num_problems):
             + sources_md
         )
 
-        fixed_packet_md = actually_fix_markdown(packet_md)
-
-        open(f"test.md", "w").write(fixed_packet_md)
-
-        # fixed_packet_md = fixed_packet_md.replace('\\$', '$')
+        hashed_part = sha256(
+            datetime.now().strftime("%d/%m/%YT%H:%M:%S").encode("utf-8")
+        ).hexdigest()
 
         markdown_to_pdf(
-            fixed_packet_md, output_path=f"{topic}_Packet_for_{grade_level}.pdf"
+            packet_md,
+            output_path=f"{BASE_PATH}/static/pdfs/{topic}_Packet_for_{grade_level}_{hashed_part}.pdf",
         )
+        fixed_packet_md = actually_fix_markdown(packet_md)
+
+        open("test.md", "w").write(fixed_packet_md)
+
+        # fixed_packet_md = fixed_packet_md.replace('\\$', '$')
 
         return f"{topic}_Packet_for_{grade_level}_{hashed_part}.pdf"
 
