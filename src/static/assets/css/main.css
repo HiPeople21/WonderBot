@@ -389,6 +389,8 @@ input, select, textarea {
 	input[type="password"],
 	input[type="email"],
 	input[type="tel"],
+	input[type="number"],
+	input[type="datetime-local"],
 	select,
 	textarea {
 		-moz-appearance: none;
@@ -414,6 +416,8 @@ input, select, textarea {
 		input[type="password"]:invalid,
 		input[type="email"]:invalid,
 		input[type="tel"]:invalid,
+		input[type="number"]:invalid,
+		input[type="datetime-local"]:invalid,
 		select:invalid,
 		textarea:invalid {
 			box-shadow: none;
@@ -423,6 +427,8 @@ input, select, textarea {
 		input[type="password"]:focus,
 		input[type="email"]:focus,
 		input[type="tel"]:focus,
+		input[type="number"]:focus,
+		input[type="datetime-local"]:focus,
 		select:focus,
 		textarea:focus {
 			background: rgba(255, 255, 255, 0.075);
@@ -456,6 +462,8 @@ input, select, textarea {
 	input[type="text"],
 	input[type="password"],
 	input[type="email"],
+	input[type="number"],
+	input[type="datetime-local"],
 	select {
 		height: 2.75rem;
 	}
@@ -1140,9 +1148,12 @@ input, select, textarea {
 			-ms-transition-delay: 0.75s;
 			transition-delay: 0.75s;
 			background-image: linear-gradient(to top, rgba(19, 21, 25, 0.5), rgba(19, 21, 25, 0.5)), url("../../images/overlay.png");
-			background-size: auto, 256px 256px;
-			background-position: center, center;
-			background-repeat: no-repeat, repeat;
+			background-size: auto,
+ 256px 256px;
+			background-position: center,
+ center;
+			background-repeat: no-repeat,
+ repeat;
 			z-index: 2;
 		}
 

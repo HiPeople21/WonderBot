@@ -3,6 +3,9 @@
     height: 100vh;
 }
 
+header .logo {
+    background: white;
+}
 
 span.icon img {
     height: 75%;
