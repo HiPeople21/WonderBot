@@ -234,7 +234,7 @@ Avoid: paywalled sites, copyrighted textbooks without open licenses, commercial 
 
 def build_messages(topic, subtopics, grade_level, num_problems):
     subtopics_txt = ", ".join(subtopics) if subtopics else "—"
-    today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    today = datetime.today().strftime("%Y-%m-%d")
 
     system = (
         "You are a meticulous web research assistant that returns ONLY verbatim practice problems "
@@ -482,7 +482,7 @@ def fix_markdown(markdown: str) -> str:
                 "role": "system",
                 "content": (
                     "Reformat the user text into valid, consistent Markdown. "
-                    "Headings must be proper Markdown headings (lines starting with 1–6 '#' followed by a space). "
+                    "Headings must be proper Markdown headings (lines starting with 1-6 '#' followed by a space). "
                     "Use `$...$` for inline math and `$$...$$` for display math. "
                     "Do NOT use \\(...\\) or \\[...\\]. "
                     "Do not invent content, only fix delimiters and close all formatting markers. "
@@ -754,7 +754,7 @@ def search_topic(topic, subtopics, grade_level, num_problems):
 
         open(f'test.md', 'w').write(fixed_packet_md)
 
-        fixed_packet_md = fixed_packet_md.replace('\\$', '$')
+        # fixed_packet_md = fixed_packet_md.replace('\\$', '$')
 
         markdown_to_pdf(fixed_packet_md, output_path=f'{topic}_Packet_for_{grade_level}.pdf')
 
@@ -764,5 +764,5 @@ def search_topic(topic, subtopics, grade_level, num_problems):
         print("\n[FATAL]", e)
         return None
 
-
-print(search_topic("Caculus", ["LHopital", "Derivatives", "Integration by Parts"], "university", 7))
+# Example usage:
+# print(search_topic("Civil War", ["Slave Trade", "Abraham Lincoln", "Battle of Gettysburg"], "middle school", 3))
