@@ -520,10 +520,13 @@ def markdown_to_pdf(md_text, output_path="output.pdf"):
 
 ################################ Example usage ##########################################
 if __name__ == "__main__":
+    topic = "Python"
+    subtopics = ["Loops", "Functions", "OOP"]
+    file = "python.pdf"
     try:
         pkt = find_textbook_packet(
-            topic="Vectors",
-            subtopics=["Gram-Schmidt process", "Vector spaces"],
+            topic=topic,
+            subtopics=subtopics,
             grade_level="undergraduate",
             max_sections=6,
             quiz_per_section=3,
@@ -533,8 +536,8 @@ if __name__ == "__main__":
         fixed_md = fix_markdown(md)
         # print(f"\n\n####################################\n\n{fixed_md}")
         problems = create_practice_problems(
-            topic="Vectors",
-            subtopics=["Gram-Schmidt", "Vector spaces"],
+            topic=topic,
+            subtopics=subtopics,
             grade_level="undergrad",
             num_problems=5,
         )
@@ -565,9 +568,7 @@ if __name__ == "__main__":
         fixed_questions_md = fix_markdown(problems_md)
         # print(f"\n\n####################################\n\n{fixed_md}\n\n{fixed_questions_md}")
 
-        markdown_to_pdf(
-            fixed_md + "\n\n" + fixed_questions_md, output_path="Vectors_Packet.pdf"
-        )
+        markdown_to_pdf(fixed_md + "\n\n" + fixed_questions_md, output_path=file)
 
     except Exception as e:
         print("\n[FATAL]", e)
