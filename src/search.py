@@ -1,11 +1,19 @@
 import os, json, requests
 from dotenv import load_dotenv
+from google import genai
+from datetime import datetime
+import re
+import pypandoc
+
 load_dotenv()
 
 PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-def _json_sanitize(s: str):
+gemini_client = genai.Client()
+
+def json_sanitize(s: str):
     try:
         return json.loads(s)
     except Exception:
@@ -16,12 +24,17 @@ def _json_sanitize(s: str):
                 except Exception: pass
     return None
 
-def _assert_api_key():
+def assert_api_key():
     if not PERPLEXITY_API_KEY or PERPLEXITY_API_KEY.strip() == "":
         raise RuntimeError("PERPLEXITY_API_KEY is missing or empty")
+    
 
-def _call_perplexity(messages, *, temperature=0.2, max_tokens=8000, debug=True):
-    _assert_api_key()
+########################################################################################
+# ----------------- Generates Textbook-style Lessons -----------------
+########################################################################################
+
+def create_lesson(messages, *, temperature=0.2, max_tokens=8000, debug=True):
+    assert_api_key()
     headers = {
         "accept": "application/json",
         "authorization": f"Bearer {PERPLEXITY_API_KEY}",
@@ -62,9 +75,7 @@ def _call_perplexity(messages, *, temperature=0.2, max_tokens=8000, debug=True):
         raise RuntimeError(f"No content returned: {json.dumps(data)[:800]}")
     return content
 
-# ---------------- textbook generator (uses the robust caller) ----------------
-
-_SCHEMA_HINT = {
+SCHEMA_HINT = {
     "type": "object",
     "required": ["title","learning_path","sections","summary","estimated_total_read_time_minutes"],
     "properties": {
@@ -101,7 +112,7 @@ _SCHEMA_HINT = {
     }
 }
 
-_SYSTEM_MSG = (
+SYSTEM_MSG = (
     "You are a master educator. Write like a concise textbook: clean, precise, structured. "
     "Short paragraphs (plain text), minimal jargon, clear notation. "
     "No citations, links, or markdown. Return ONLY valid JSON."
@@ -128,16 +139,16 @@ Constraints and style:
 
 Output:
 Return ONLY valid JSON matching this schema (no prose outside JSON):
-{json.dumps(_SCHEMA_HINT)}
+{json.dumps(SCHEMA_HINT)}
 """.strip()
 
-    content = _call_perplexity(
-        [{"role": "system", "content": _SYSTEM_MSG},
+    content = create_lesson(
+        [{"role": "system", "content": SYSTEM_MSG},
          {"role": "user", "content": user_msg}],
         max_tokens=8000,
         debug=debug
     )
-    parsed = _json_sanitize(content)
+    parsed = json_sanitize(content)
     if not parsed:
         # fail-soft: small skeleton so downstream doesn’t crash
         return {
@@ -158,6 +169,167 @@ Return ONLY valid JSON matching this schema (no prose outside JSON):
             "estimated_total_read_time_minutes": 3
         }
     return parsed
+
+########################################################################################
+# ----------------- Generates Practice Problems via Web Search -----------------
+########################################################################################
+
+OPENLY_LICENSED_HINT = """
+Prefer openly licensed or university sources where verbatim copying is permitted:
+- ocw.mit.edu, web.mit.edu (MIT OCW)
+- openstax.org
+- physics.mit.edu, physics.ucsb.edu, physics.berkeley.edu
+- stanford.edu, harvard.edu, berkeley.edu, cmu.edu, utexas.edu, ucsd.edu, illinois.edu
+- arizona.edu, colorado.edu, umich.edu, cornell.edu
+- Any *.edu domain with problem sets or PDF solutions
+Avoid: paywalled sites, copyrighted textbooks without open licenses, commercial worksheets.
+"""
+
+def build_messages(topic, subtopics, grade_level, num_problems):
+    subtopics_txt = ", ".join(subtopics) if subtopics else "—"
+    today = datetime.utcnow().date().isoformat()
+
+    system = (
+        "You are a meticulous web research assistant that returns ONLY verbatim practice problems "
+        "and their official solutions from credible, preferably open-licensed sources. "
+        "You must search the live web. Never paraphrase or invent content. Always cite the exact URL."
+    )
+
+    # Strict JSON schema & counting rules
+    schema = {
+        "type": "array",
+        "minItems": num_problems,
+        "maxItems": num_problems,
+        "items": {
+            "type": "object",
+            "required": ["question", "solution", "source_title", "source_url", "license"],
+            "properties": {
+                "question": {"type": "string"},     # verbatim
+                "solution": {"type": "string"},     # verbatim
+                "source_title": {"type": "string"},
+                "source_url": {"type": "string"},
+                "license": {"type": "string"}       # e.g., "MIT OCW CC BY-NC-SA", "University PDF (educational use)"
+            }
+        }
+    }
+
+    user = f"""
+Goal:
+Find exactly {num_problems} (no more, no less) high-quality practice problems for:
+- Topic: {topic}
+- Subtopics: {subtopics_txt}
+- Grade level: {grade_level}
+- Date context: {today}
+
+Requirements (critical):
+1) Search the web and pick problems from credible sources, ideally open-license. {OPENLY_LICENSED_HINT}
+2) Return the problem **question** and the **official solution** **verbatim** (copy text exactly; do NOT paraphrase or summarize).
+3) Include the **source_title**, **source_url**, and **license**/rights note if present on the page (e.g., 'CC BY-NC-SA').
+4) If a single page has multiple suitable problems, you may select more than one from that page.
+5) Exclude duplicates and trivial problems.
+6) If insufficient items are found on preferred domains, broaden to other .edu domains or archived PDFs until you reach exactly {num_problems}.
+7) Output **ONLY valid JSON** matching this schema (no prose, no markdown): {json.dumps(schema)}
+
+Important format rules:
+- Preserve original line breaks and math formatting (use plaintext; you may include ASCII math like 'F = ma').
+- Do NOT include any commentary, headings, or extra keys.
+- The array MUST contain exactly {num_problems} items.
+"""
+
+    # Optional domain-bias hint inside the last user message improves retrieval quality
+    domain_bias = (
+        "Search hints (you may vary as needed): "
+        "site:ocw.mit.edu OR site:web.mit.edu OR site:openstax.org OR site:*.edu filetype:pdf "
+        f'"{topic}" {" ".join(subtopics or [])} practice problems solutions'
+    )
+
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user + "\n\n" + domain_bias}
+    ]
+
+def _strict_json_load(maybe_json: str):
+    """Best-effort to recover a JSON array if the model wraps it in stray text."""
+    try:
+        return json.loads(maybe_json)
+    except json.JSONDecodeError:
+        start, end = maybe_json.find("["), maybe_json.rfind("]")
+        if start != -1 and end != -1:
+            return json.loads(maybe_json[start:end+1])
+        raise
+
+def _validate_items(items, num_expected):
+    if not isinstance(items, list) or len(items) != num_expected:
+        raise ValueError(f"Expected exactly {num_expected} items, got {len(items) if isinstance(items, list) else 'non-list'}")
+    url_re = re.compile(r"^https?://", re.I)
+    for i, it in enumerate(items, 1):
+        for k in ["question", "solution", "source_title", "source_url", "license"]:
+            if k not in it or not isinstance(it[k], str) or not it[k].strip():
+                raise ValueError(f"Item {i} missing/empty field: {k}")
+        if not url_re.match(it["source_url"]):
+            raise ValueError(f"Item {i} has invalid source_url: {it['source_url']}")
+        # Basic verbatim sanity: avoid obvious paraphrase markers
+        if "paraphrase" in it["question"].lower() or "paraphrase" in it["solution"].lower():
+            raise ValueError(f"Item {i} looks paraphrased.")
+    return True
+
+def create_practice_problems(topic, subtopics, grade_level, num_problems,
+                             max_tokens=8000, temperature=0.2, debug=True):
+    """
+    Uses Perplexity Sonar to fetch EXACTLY `num_problems` practice problems with verbatim questions & solutions
+    from credible/open sources (preferring MIT OCW, OpenStax, and .edu problem sets).
+    Returns a Python list of dicts: [{question, solution, source_title, source_url, license}, ...]
+    """
+    assert_api_key()
+
+    messages = build_messages(topic, subtopics, grade_level, num_problems)
+
+    headers = {
+        "accept": "application/json",
+        "authorization": f"Bearer {PERPLEXITY_API_KEY}",
+        "content-type": "application/json",
+    }
+    payload = {
+        "model": "sonar-pro",
+        "messages": messages,
+        "temperature": temperature,
+        "top_p": 0.9,
+        "max_tokens": max_tokens,
+        "stream": False,
+        "enable_search_classifier": True,
+        "return_search_results": True,   # helpful for auditing sources
+    }
+
+    try:
+        r = requests.post(PERPLEXITY_API_URL, json=payload, headers=headers, timeout=90)
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"HTTP request failed: {e}")
+
+    if debug:
+        print(f"[perplexity] status={r.status_code}")
+        print(f"[perplexity] body head: {r.text[:800]}")
+
+    try:
+        r.raise_for_status()
+    except requests.HTTPError as he:
+        raise RuntimeError(f"API error {r.status_code}: {r.text}") from he
+
+    data = r.json()
+    if not isinstance(data, dict) or "choices" not in data or not data["choices"]:
+        raise RuntimeError(f"Unexpected response structure: {json.dumps(data)[:800]}")
+
+    content = data["choices"][0].get("message", {}).get("content", "")
+    if not content:
+        raise RuntimeError(f"No content returned: {json.dumps(data)[:800]}")
+
+    # Parse + validate strict JSON
+    items = _strict_json_load(content)
+    _validate_items(items, num_problems)
+    return items
+
+##########################################################################################
+# ------------------------------------ Formatting ----------------------------------------
+##########################################################################################
 
 def textbook_json_to_markdown(packet: dict) -> str:
     md = [f"# {packet.get('title','Learning Packet')}\n"]
@@ -209,7 +381,7 @@ def fix_markdown(markdown):
             },
             {
                 "role": "user",
-                "content": f"Reformat the following text into correctly formatted markdown code:\n\n{markdown}"
+                "content": f"Reformat the following text into correctly formatted markdown code. Format it such that the equations are centered on the page and are easy to identify and read. Only return the markdown code. Do not use HTML, use \\[\\] format for centering:\n\n{markdown}"
             }
         ],
         "max_tokens": 16000,
@@ -217,9 +389,38 @@ def fix_markdown(markdown):
     }
 
     response = requests.post(PERPLEXITY_API_URL, headers=headers, json=payload)
-    return response.json()["choices"][0]["message"]["content"]
+    return response.json()["choices"][0]["message"]["content"][len("```markdown\n"):-3]
 
-# ---------------- quick smoke test ----------------
+def markdown_to_pdf(md_text, output_path="output.pdf"):
+    """
+    Converts a Markdown string to a nicely formatted PDF file.
+
+    Args:
+        md_text (str): The Markdown text to convert.
+        output_path (str): Path for the resulting PDF file.
+
+    Returns:
+        str: Path to the generated PDF.
+    """
+    # Ensure pandoc is available
+    try:
+        pypandoc.get_pandoc_version()
+    except OSError:
+        raise RuntimeError("Pandoc is not installed. Please install it first.")
+
+    # Convert Markdown → PDF (standalone ensures a full document structure)
+    pypandoc.convert_text(
+        md_text,
+        to="pdf",
+        format="md",
+        outputfile=output_path,
+        extra_args=["--standalone"]
+    )
+
+    print(f"✅ PDF created at: {os.path.abspath(output_path)}")
+    return output_path
+
+################################ Example usage ##########################################
 if __name__ == "__main__":
     try:
         pkt = find_textbook_packet(
@@ -232,7 +433,34 @@ if __name__ == "__main__":
         )
         md = textbook_json_to_markdown(pkt)
         fixed_md = fix_markdown(md)
-        print(fixed_md)
+        # print(f"\n\n####################################\n\n{fixed_md}")
+        problems = create_practice_problems(
+            topic="Vectors",
+            subtopics=["Gram-Schmidt", "Vector spaces"],
+            grade_level="undergrad",
+            num_problems=5,
+        )
+
+        problems_questions = ["Practice Problems:\n"]
+        problems_solutions = ["Solutions:\n"]
+        problems_sources = ["Sources:\n"]
+        for i in range(len(problems)):
+            problems_questions.append(f"\n--- Problem {i} ---")
+            problems_sources.append(f"Source: {problems[i]['source_title']} {problems[i]['source_url']} | {problems[i]['license']}\n")
+            problems_questions.append(f"{i+1}: {problems[i]['question']}\n")
+            problems_solutions.append(f"{i+1}: {problems[i]['solution']}\n")
+
+        print(f"\n\n#############################################\n\nSources: {problems_sources}\n\n")
+
+        problems_md = "\n".join(problems_questions) + "\n" + "\n".join(problems_solutions) + "\n" + "\n".join(problems_sources)
+
+        fixed_questions_md = fix_markdown(problems_md)
+        # print(f"\n\n####################################\n\n{fixed_md}\n\n{fixed_questions_md}")
+
+        markdown_to_pdf(fixed_md + "\n\n" + fixed_questions_md, output_path="Vectors_Packet.pdf")
 
     except Exception as e:
         print("\n[FATAL]", e)
+
+
+# still need to add sources and still a bit buggy
