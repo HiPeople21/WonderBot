@@ -95,25 +95,6 @@ source .venv/bin/activate
 # .venv\Scripts\Activate.ps1
 
 python -m pip install --upgrade pip
-pip install flask requests python-dotenv perplexityai google-genai pypandoc
-# Optional: if Pandoc is not installed system-wide, bundle a binary:
-# pip install pypandoc-binary
-```
-
-(Optional) Create `requirements.txt`:
-
-```text
-flask>=3.0
-requests>=2.31
-python-dotenv>=1.0
-perplexityai>=0.7
-google-genai>=0.3
-pypandoc>=1.13
-```
-
-Install via:
-
-```bash
 pip install -r requirements.txt
 ```
 

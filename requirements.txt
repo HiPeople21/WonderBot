@@ -1,3 +1,6 @@
-Flask==3.1.2
-python-dotenv==1.1.1
-perplexityai
+flask>=3.0
+requests>=2.31
+python-dotenv>=1.0
+perplexityai>=0.7
+google-genai>=0.3
+pypandoc>=1.13
