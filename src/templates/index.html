@@ -35,6 +35,7 @@
 							<ul>
 								<li><a href="#create">Create</a></li>
 								<li><a href="#search">Search</a></li>
+								<li style="display: none"><a href="#viewer"></a></li>
 							</ul>
 						</nav>
 					</header>
@@ -47,7 +48,7 @@
 									<div class="fields">
 										<div class="field">
                                             <label for="guide-prompt">Topic Prompt</label>
-                                            <textarea name="guide-prompt" id="guide-prompt" placeholder="Enter your topic" rows="6" pattern="^\s*\S.*$"></textarea>
+                                            <textarea name="guide-prompt" id="guide-prompt" placeholder="Enter your topic" rows="6" required></textarea>
                                         </div>
                                         <div class="field half">
 											<label for="exercise-count">Number Of Exercises</label>
@@ -75,8 +76,8 @@
                                 <form method="POST" id="search-form">
 									<div class="fields">
 										<div class="field">
-											<label for="search">What would you like to learn about?</label>
-											<input type="text" name="search" id="search" pattern="^\s*\S.*$"/>
+											<label for="search-input">What would you like to learn about?</label>
+											<input type="text" name="search" id="search-input" required/>
 										</div>
 									</div>
 									<ul class="actions">
@@ -89,7 +90,7 @@
 								<h2 class="major">Viewer</h2>
 								<div class="pdf-container">
 									<embed
-										src="{{ url_for("static", filename="Vectors_Packet.pdf") }}"
+										src=""
 										type="application/pdf"
 										frameBorder="0"
 										scrolling="auto"

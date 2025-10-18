@@ -3,6 +3,12 @@ body {
     height: 100%;
 }
 
+body {
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+}
+
 #bg-vid {
     width: 100vw;
     height: 100vh;
@@ -25,7 +31,7 @@ span.icon img {
 }
 
 #viewer {
-    min-height: 85vh;
+    min-height: 90vh;
     display: flex;
     flex-direction: column;
 }
