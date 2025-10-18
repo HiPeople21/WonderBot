@@ -194,6 +194,31 @@ def textbook_json_to_markdown(packet: dict) -> str:
     if packet.get("summary"): md.append("## Summary\n" + packet["summary"])
     return "\n".join(md)
 
+def fix_markdown(markdown):
+    headers = {
+        "accept": "application/json",
+        "authorization": f"Bearer {PERPLEXITY_API_KEY}",
+        "content-type": "application/json",
+    }
+    payload = {
+        "model": "sonar-pro",
+        "messages": [
+            {
+                "role": "system",
+                "content": "Do not search the web, only process and reformat text provided by the user."
+            },
+            {
+                "role": "user",
+                "content": f"Reformat the following text into correctly formatted markdown code:\n\n{markdown}"
+            }
+        ],
+        "max_tokens": 16000,
+        "temperature": 0.3
+    }
+
+    response = requests.post(PERPLEXITY_API_URL, headers=headers, json=payload)
+    return response.json()["choices"][0]["message"]["content"]
+
 # ---------------- quick smoke test ----------------
 if __name__ == "__main__":
     try:
@@ -206,6 +231,8 @@ if __name__ == "__main__":
             debug=True     # prints HTTP status and body head
         )
         md = textbook_json_to_markdown(pkt)
-        print(md)
+        fixed_md = fix_markdown(md)
+        print(fixed_md)
+
     except Exception as e:
         print("\n[FATAL]", e)
