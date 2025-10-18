@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+import pathlib
 from dotenv import load_dotenv
 from datetime import datetime
 import re
@@ -8,6 +9,8 @@ import pypandoc
 from google import genai
 
 load_dotenv()
+
+BASE_PATH = pathlib.Path(__file__).parent
 
 PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
@@ -623,7 +626,6 @@ def sanitize_markdown_for_latex(md: str) -> str:
     return "".join(out)
 
 
-
 def markdown_to_pdf(md_text, output_path="output.pdf"):
     header_tex = r"""
 \usepackage{amsmath,amssymb,mathtools}
@@ -667,6 +669,7 @@ def actually_fix_markdown(md):
     return response.text[len("```markdown\n"):-3].strip()
 
 
+
 def search_topic(topic, subtopics, grade_level, num_problems):
     try:
         # Get textbook packet
@@ -690,11 +693,11 @@ def search_topic(topic, subtopics, grade_level, num_problems):
         )
 
         # Cleans practice problems into markdown format
-        PAGEBREAK = "\n\n\\newpage\n\n"  
+        PAGEBREAK = "\n\n\\newpage\n\n"
 
         problems_questions = ["# Practice Problems", ""]
         problems_solutions = ["# Solutions", ""]
-        problems_sources   = ["# Sources", ""]
+        problems_sources = ["# Sources", ""]
 
         for i, p in enumerate(problems, 1):
             q = strip_leading_numbering(p["question"])
@@ -709,14 +712,16 @@ def search_topic(topic, subtopics, grade_level, num_problems):
             problems_solutions.append(s)
             problems_solutions.append("")
 
-            problems_sources.append(f"- {p['source_title']} — {p['source_url']} | {p['license']}")
+            problems_sources.append(
+                f"- {p['source_title']} — {p['source_url']} | {p['license']}"
+            )
         problems_sources.append("")
 
-        problems_sources.append("") 
+        problems_sources.append("")
 
         questions_md = "\n\n\n".join(problems_questions)
         solutions_md = "\n\n\n".join(problems_solutions)
-        sources_md   = "\n".join(problems_sources)
+        sources_md = "\n".join(problems_sources)
 
         # Fixing markdown formatting
         # fixed_main_md = fix_markdown(md)  # your textbook part
@@ -753,7 +758,7 @@ def search_topic(topic, subtopics, grade_level, num_problems):
 
         markdown_to_pdf(fixed_packet_md, output_path=f'{topic}_Packet_for_{grade_level}.pdf')
 
-        return f'{topic}_Packet_for_{grade_level}.pdf'
+        return f"{topic}_Packet_for_{grade_level}.pdf"
 
     except Exception as e:
         print("\n[FATAL]", e)
