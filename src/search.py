@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+from hashlib import sha256
 import pathlib
 from dotenv import load_dotenv
 from datetime import datetime
@@ -36,7 +37,7 @@ def create_lesson(messages, *, temperature=0.2, max_tokens=8000, debug=True):
         "content-type": "application/json",
     }
     payload = {
-        "model": "sonar-pro",  
+        "model": "sonar-pro",
         "messages": messages,
         "temperature": temperature,
         "top_p": 0.9,
@@ -55,7 +56,7 @@ def create_lesson(messages, *, temperature=0.2, max_tokens=8000, debug=True):
         # print only first 800 chars to avoid flooding logs
         print(f"[perplexity] body head: {r.text[:800]}")
 
-    # Explicitly raise HTTP errors 
+    # Explicitly raise HTTP errors
     try:
         r.raise_for_status()
     except requests.HTTPError as he:
@@ -178,7 +179,7 @@ Output:
 Return ONLY valid JSON matching this schema (no prose outside JSON):
 {json.dumps(SCHEMA_HINT)}
 """.strip()
-    
+
     #### EDIT ABOVE TO INCLUDE IMAGES
 
     content = create_lesson(
@@ -370,7 +371,7 @@ def create_practice_problems(
         "max_tokens": max_tokens,
         "stream": False,
         "enable_search_classifier": True,
-        "return_search_results": True,  
+        "return_search_results": True,
     }
 
     try:
@@ -405,6 +406,7 @@ def create_practice_problems(
 # ------------------------------------ Formatting ----------------------------------------
 ##########################################################################################
 
+
 def json_sanitize(s: str):
     try:
         return json.loads(s)
@@ -417,6 +419,7 @@ def json_sanitize(s: str):
                 except Exception:
                     pass
     return None
+
 
 def textbook_json_to_markdown(packet: dict) -> str:
     md = [f"# {packet.get('title', 'Learning Packet')}\n"]
@@ -509,9 +512,10 @@ def fix_markdown(markdown: str) -> str:
         first_nl = content.find("\n")
         last_ticks = content.rfind("```")
         if first_nl != -1 and last_ticks != -1 and last_ticks > first_nl:
-            content = content[first_nl + 1:last_ticks].strip()
+            content = content[first_nl + 1 : last_ticks].strip()
 
     return content
+
 
 # Fix numbering
 NUM_PREFIX_RE = re.compile(
@@ -522,8 +526,9 @@ NUM_PREFIX_RE = re.compile(
         [IVXLCM]+[\).\:]              |  # roman numerals
         [a-zA-Z][\).\:]\s*               # "a)" "b."
     )\s*""",
-    re.IGNORECASE | re.VERBOSE
+    re.IGNORECASE | re.VERBOSE,
 )
+
 
 def strip_leading_numbering(text: str) -> str:
     # remove numbering only from the first line, keep subparts inside
@@ -531,6 +536,7 @@ def strip_leading_numbering(text: str) -> str:
     if lines:
         lines[0] = NUM_PREFIX_RE.sub("", lines[0]).lstrip()
     return "\n".join(lines).rstrip()
+
 
 MATH_CMDS = r"(vec|frac|cdot|times|ldots|nabla|partial|sqrt|sum|prod|int|lim|log|ln|sin|cos|tan|alpha|beta|gamma|Delta|leq|geq|pm)"
 
@@ -634,6 +640,7 @@ def markdown_to_pdf(md_text, output_path="output.pdf"):
 \usepackage{siunitx}
 """
     import tempfile, os
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".tex", delete=False) as hf:
         hf.write(header_tex)
         header_path = hf.name
@@ -649,14 +656,19 @@ def markdown_to_pdf(md_text, output_path="output.pdf"):
             extra_args=[
                 "--standalone",
                 "--pdf-engine=xelatex",
-                "--include-in-header", header_path,
-                "-V", "geometry:margin=1in",
+                "--include-in-header",
+                header_path,
+                "-V",
+                "geometry:margin=1in",
                 "--log=build.log",
             ],
         )
     finally:
-        try: os.remove(header_path)
-        except: pass
+        try:
+            os.remove(header_path)
+        except:
+            pass
+
 
 def actually_fix_markdown(md):
     client = genai.Client()
@@ -666,8 +678,7 @@ def actually_fix_markdown(md):
         contents=f"Fix the syntax errors in the following markdown code, return only the markdown code: \n\n{md}",
     )
 
-    return response.text[len("```markdown\n"):-3].strip()
-
+    return response.text[len("```markdown\n") : -3].strip()
 
 
 def search_topic(topic, subtopics, grade_level, num_problems):
@@ -746,13 +757,13 @@ def search_topic(topic, subtopics, grade_level, num_problems):
         # fixed_q_md    = fix_markdown(questions_md)
         # fixed_s_md    = fix_markdown(solutions_md)
         fixed_main_md = fix_markdown(md)
-        fixed_q_md    = fix_markdown(questions_md)
-        fixed_s_md    = fix_markdown(solutions_md)
+        fixed_q_md = fix_markdown(questions_md)
+        fixed_s_md = fix_markdown(solutions_md)
 
         # Sanitize for LaTeX robustness
         fixed_main_md = sanitize_markdown_for_latex(fixed_main_md)
-        fixed_q_md    = sanitize_markdown_for_latex(fixed_q_md)
-        fixed_s_md    = sanitize_markdown_for_latex(fixed_s_md)
+        fixed_q_md = sanitize_markdown_for_latex(fixed_q_md)
+        fixed_s_md = sanitize_markdown_for_latex(fixed_s_md)
         # no need to run on sources
 
         # ----- Assemble final document with explicit breaks between blocks -----
@@ -768,17 +779,20 @@ def search_topic(topic, subtopics, grade_level, num_problems):
 
         fixed_packet_md = actually_fix_markdown(packet_md)
 
-        open(f'test.md', 'w').write(fixed_packet_md)
+        open(f"test.md", "w").write(fixed_packet_md)
 
         # fixed_packet_md = fixed_packet_md.replace('\\$', '$')
 
-        markdown_to_pdf(fixed_packet_md, output_path=f'{topic}_Packet_for_{grade_level}.pdf')
+        markdown_to_pdf(
+            fixed_packet_md, output_path=f"{topic}_Packet_for_{grade_level}.pdf"
+        )
 
-        return f"{topic}_Packet_for_{grade_level}.pdf"
+        return f"{topic}_Packet_for_{grade_level}_{hashed_part}.pdf"
 
     except Exception as e:
         print("\n[FATAL]", e)
         return None
+
 
 # Example usage:
 # print(search_topic("Civil War", ["Slave Trade", "Abraham Lincoln", "Battle of Gettysburg"], "middle school", 3))
