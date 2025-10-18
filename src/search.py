@@ -732,7 +732,23 @@ def search_topic(topic, subtopics, grade_level, num_problems):
 
         questions_md = "\n\n\n".join(problems_questions)
         solutions_md = "\n\n\n".join(problems_solutions)
-        sources_md = "\n".join(problems_sources)
+        
+        # --- textbook citations ---
+        textbook_citations = pkt.get("citations") or []
+        for url in textbook_citations:
+            if isinstance(url, str) and url.strip():
+                problems_sources.append(f"- {url.strip()}")
+
+        # (Optional) de-duplicate identical lines while preserving order
+        seen = set()
+        deduped_sources = ["# Sources", ""]
+        for line in problems_sources[2:]:
+            if line not in seen:
+                deduped_sources.append(line)
+                seen.add(line)
+
+        problems_sources = deduped_sources
+        problems_sources.append("")  # trailing newline
 
         # Fixing markdown formatting
         # fixed_main_md = fix_markdown(md)  # your textbook part
