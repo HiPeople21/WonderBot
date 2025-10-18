@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 import re
 import pypandoc
+from google import genai
 
 load_dotenv()
 
@@ -14,20 +15,7 @@ BASE_PATH = pathlib.Path(__file__).parent
 
 PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
-
-
-def json_sanitize(s: str):
-    try:
-        return json.loads(s)
-    except Exception:
-        for a, b in [("{", "}"), ("[", "]")]:
-            i, j = s.find(a), s.rfind(b)
-            if i != -1 and j != -1 and j > i:
-                try:
-                    return json.loads(s[i : j + 1])
-                except Exception:
-                    pass
-    return None
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 
 def assert_api_key():
@@ -40,6 +28,7 @@ def assert_api_key():
 ########################################################################################
 
 
+# Temperature 0.2 for focused, less random output
 def create_lesson(messages, *, temperature=0.2, max_tokens=8000, debug=True):
     assert_api_key()
     headers = {
@@ -48,7 +37,7 @@ def create_lesson(messages, *, temperature=0.2, max_tokens=8000, debug=True):
         "content-type": "application/json",
     }
     payload = {
-        "model": "sonar-pro",  # try "sonar" if you get 400 / access errors
+        "model": "sonar-pro",
         "messages": messages,
         "temperature": temperature,
         "top_p": 0.9,
@@ -67,7 +56,7 @@ def create_lesson(messages, *, temperature=0.2, max_tokens=8000, debug=True):
         # print only first 800 chars to avoid flooding logs
         print(f"[perplexity] body head: {r.text[:800]}")
 
-    # Explicitly raise HTTP errors so you see body in console
+    # Explicitly raise HTTP errors
     try:
         r.raise_for_status()
     except requests.HTTPError as he:
@@ -91,6 +80,7 @@ SCHEMA_HINT = {
         "sections",
         "summary",
         "estimated_total_read_time_minutes",
+        "citations",
     ],
     "properties": {
         "title": {"type": "string"},
@@ -149,13 +139,14 @@ SCHEMA_HINT = {
         },
         "summary": {"type": "string"},
         "estimated_total_read_time_minutes": {"type": "integer"},
+        "citations": {"type": "array", "items": {"type": "string"}},
     },
 }
 
 SYSTEM_MSG = (
     "You are a master educator. Write like a concise textbook: clean, precise, structured. "
     "Short paragraphs (plain text), minimal jargon, clear notation. "
-    "No citations, links, or markdown. Return ONLY valid JSON."
+    "No links or markdown in ALL fields. Citations ONLY go in the 'citations' field. The citation should ONLY include the link to the source. Return ONLY valid JSON. "
 )
 
 
@@ -177,10 +168,10 @@ Focus subtopics (include and integrate): {subtopics_txt}
 Constraints and style:
 - Clarity and density. Short paragraphs (plain text), precise definitions, minimal fluff.
 - Logical learning order (prerequisites first).
-- Each section: 120–220 word overview, 3–6 key points, essential formulas (LaTeX ok),
+- Each section: 120-400 word overview, 3-6 key points, essential formulas (LaTeX ok),
   1 worked example with steps, 1 small diagram described by text (caption + drawing instructions),
-  2–4 common pitfalls, and {quiz_per_section} mini-quiz Q/A.
-- Keep derivations brief (5–10 lines) only when essential.
+  2-4 common pitfalls, and {quiz_per_section} mini-quiz Q/A.
+- Keep derivations brief (5-10 lines) only when essential.
 - DO NOT include citations, URLs, references, or markdown.
 - Keep total number of sections ≤ {max_sections} by merging closely related subtopics.
 
@@ -188,6 +179,8 @@ Output:
 Return ONLY valid JSON matching this schema (no prose outside JSON):
 {json.dumps(SCHEMA_HINT)}
 """.strip()
+
+    #### EDIT ABOVE TO INCLUDE IMAGES
 
     content = create_lesson(
         [
@@ -234,13 +227,15 @@ Prefer openly licensed or university sources where verbatim copying is permitted
 - stanford.edu, harvard.edu, berkeley.edu, cmu.edu, utexas.edu, ucsd.edu, illinois.edu
 - arizona.edu, colorado.edu, umich.edu, cornell.edu
 - Any *.edu domain with problem sets or PDF solutions
+- khanacademy.org
+- archive.org (for archived textbooks with open licenses)
 Avoid: paywalled sites, copyrighted textbooks without open licenses, commercial worksheets.
 """
 
 
 def build_messages(topic, subtopics, grade_level, num_problems):
     subtopics_txt = ", ".join(subtopics) if subtopics else "—"
-    today = datetime.utcnow().date().isoformat()
+    today = datetime.today().strftime("%Y-%m-%d")
 
     system = (
         "You are a meticulous web research assistant that returns ONLY verbatim practice problems "
@@ -290,6 +285,9 @@ Requirements (critical):
 5) Exclude duplicates and trivial problems.
 6) If insufficient items are found on preferred domains, broaden to other .edu domains or archived PDFs until you reach exactly {num_problems}.
 7) Output **ONLY valid JSON** matching this schema (no prose, no markdown): {json.dumps(schema)}
+8) Try to give at least one problem per subtopic if possible.
+9) Prioritize problems with complete solutions (work shown, final answer).
+10) Prioritize problems with multiple parts (a, b, c...) for depth.
 
 Important format rules:
 - Preserve original line breaks and math formatting (use plaintext; you may include ASCII math like 'F = ma').
@@ -373,7 +371,7 @@ def create_practice_problems(
         "max_tokens": max_tokens,
         "stream": False,
         "enable_search_classifier": True,
-        "return_search_results": True,  # helpful for auditing sources
+        "return_search_results": True,
     }
 
     try:
@@ -407,6 +405,20 @@ def create_practice_problems(
 ##########################################################################################
 # ------------------------------------ Formatting ----------------------------------------
 ##########################################################################################
+
+
+def json_sanitize(s: str):
+    try:
+        return json.loads(s)
+    except Exception:
+        for a, b in [("{", "}"), ("[", "]")]:
+            i, j = s.find(a), s.rfind(b)
+            if i != -1 and j != -1 and j > i:
+                try:
+                    return json.loads(s[i : j + 1])
+                except Exception:
+                    pass
+    return None
 
 
 def textbook_json_to_markdown(packet: dict) -> str:
@@ -460,7 +472,7 @@ def textbook_json_to_markdown(packet: dict) -> str:
     return "\n".join(md)
 
 
-def fix_markdown(markdown):
+def fix_markdown(markdown: str) -> str:
     headers = {
         "accept": "application/json",
         "authorization": f"Bearer {PERPLEXITY_API_KEY}",
@@ -471,157 +483,202 @@ def fix_markdown(markdown):
         "messages": [
             {
                 "role": "system",
-                "content": "Ignore any previous math formatting instructions. "
-                "Always output inline math expressions wrapped in single dollar signs `$...$`. "
-                "For display math use `$$...$$`. "
-                "Do not search the web, only process and reformat text provided by the user.",
+                "content": (
+                    "Reformat the user text into valid, consistent Markdown. "
+                    "Headings must be proper Markdown headings (lines starting with 1-6 '#' followed by a space). "
+                    "Use `$...$` for inline math and `$$...$$` for display math. "
+                    "Do NOT use \\(...\\) or \\[...\\]. "
+                    "Do not invent content, only fix delimiters and close all formatting markers. "
+                    "Make sure all backticks, asterisks, and dollar signs are balanced."
+                ),
             },
             {
                 "role": "user",
-                "content": f"Reformat the following text into correctly formatted markdown code. Format it such that the equations are centered on the page and are easy to identify and read. Only return the markdown code. Do not use HTML:\n\n{markdown}.",
+                "content": f"Rewrite this as valid Markdown with balanced math delimiters and headers. Only return the Markdown:\n\n{markdown}",
             },
         ],
-        "max_tokens": 16000,
-        "temperature": 0.3,
+        "max_tokens": 20000,
+        "temperature": 0.2,
+        # "stream": True,
+        # "web_search_options": {"search_type": "pro"},
     }
 
-    response = requests.post(PERPLEXITY_API_URL, headers=headers, json=payload)
-    return response.json()["choices"][0]["message"]["content"][
-        len("```markdown\n") : -3
-    ]
+    r = requests.post(PERPLEXITY_API_URL, headers=headers, json=payload, timeout=90)
+    r.raise_for_status()
+    content = r.json()["choices"][0]["message"]["content"].strip()
+
+    # If model wrapped in fences, strip them safely
+    if content.startswith("```"):
+        first_nl = content.find("\n")
+        last_ticks = content.rfind("```")
+        if first_nl != -1 and last_ticks != -1 and last_ticks > first_nl:
+            content = content[first_nl + 1 : last_ticks].strip()
+
+    return content
 
 
-# commands that must be inside math mode
-_MATH_CMDS = r"(vec|frac|cdot|times|ldots|nabla|partial|sqrt|sum|prod|int|lim|log|ln|sin|cos|tan|alpha|beta|gamma|Delta|leq|geq|pm)"
+# Fix numbering
+NUM_PREFIX_RE = re.compile(
+    r"""^\s*(
+        (?:problem\s*)?\d+[\).\:]    |  # "Problem 3:" / "3." / "3)"
+        (?:Q(?:uestion)?\s*)?\d+[\).\:] |
+        [\(\[]?\d+[\)\]]\s*           |  # "(3)" "[3]"
+        [IVXLCM]+[\).\:]              |  # roman numerals
+        [a-zA-Z][\).\:]\s*               # "a)" "b."
+    )\s*""",
+    re.IGNORECASE | re.VERBOSE,
+)
 
 
-def ensure_math_mode(md: str) -> str:
-    lines, out = md.splitlines(), []
-    for ln in lines:
-        # already math? skip
-        if any(
-            tok in ln
-            for tok in (
-                "\\[",
-                "\\]",
-                "\\(",
-                "\\)",
-                "$",
-                "\\begin{align",
-                "\\begin{equation}",
-            )
-        ):
-            out.append(ln)
-            continue
+def strip_leading_numbering(text: str) -> str:
+    # remove numbering only from the first line, keep subparts inside
+    lines = text.lstrip().splitlines()
+    if lines:
+        lines[0] = NUM_PREFIX_RE.sub("", lines[0]).lstrip()
+    return "\n".join(lines).rstrip()
 
-        # contains math commands but no math delimiters → wrap whole line
-        if re.search(rf"\\{_MATH_CMDS}\\b", ln):
-            ln = f"${ln}$"
 
-        # fix common artifacts (e.g., '\$.' should be '$.')
-        ln = ln.replace("\\$.", "$.")
-        ln = ln.replace("\\$", "$")
+MATH_CMDS = r"(vec|frac|cdot|times|ldots|nabla|partial|sqrt|sum|prod|int|lim|log|ln|sin|cos|tan|alpha|beta|gamma|Delta|leq|geq|pm)"
 
-        # balance odd number of $ (rare, but prevents LaTeX choke)
-        if ln.count("$") % 2 == 1:
-            ln += "$"
 
-        out.append(ln)
-    return "\n".join(out)
+def sanitize_markdown_for_latex(md: str) -> str:
+    """
+    Preflight sanitizer to reduce LaTeX build errors from Pandoc.
+    - Normalizes math delimiters to $...$ (inline) and $$...$$ (display)
+    - Ensures math commands are in math mode
+    - Escapes LaTeX special chars in non-math, non-code
+    """
+    import re
+
+    # Split into code fences so we don't touch code blocks
+    fence_pat = re.compile(r"(?s)(```.*?```)")
+    parts = fence_pat.split(md)
+
+    def _normalize_math_delims(text: str) -> str:
+        # Convert \(...\) -> $...$ and \[...\] -> $$...$$
+        text = re.sub(r"\\\((.*?)\\\)", r"$\1$", text, flags=re.S)
+        text = re.sub(r"\\\[(.*?)\\\]", r"$$\1$$", text, flags=re.S)
+
+        # Ensure there is no mix of $$ inside inline runs; leave $$...$$ alone
+        return text
+
+    def _force_math_for_cmds(text: str) -> str:
+        # If a line contains a math command but no $ or $$, wrap the minimal span in $...$
+        out_lines = []
+        for ln in text.splitlines():
+            if "$" in ln or "$$" in ln:
+                out_lines.append(ln)
+                continue
+            if re.search(rf"\\{MATH_CMDS}\b", ln):
+                out_lines.append(f"${ln}$")
+            else:
+                out_lines.append(ln)
+        return "\n".join(out_lines)
+
+    def _escape_latex_specials(text: str) -> str:
+        # Do not escape inside math ($...$ or $$...$$). Split by math spans first.
+        # Order: $$...$$ first (display), then $...$ (inline)
+        def esc(s: str) -> str:
+            # Escape: \, {, }, $, &, #, _, %, ~, ^
+            s = s.replace("\\", r"\\")
+            s = s.replace("{", r"\{").replace("}", r"\}")
+            s = s.replace("&", r"\&").replace("#", r"\#").replace("%", r"\%")
+            s = s.replace("_", r"\_").replace("$", r"\$")
+            s = s.replace("~", r"\textasciitilde{}").replace("^", r"\textasciicircum{}")
+            return s
+
+        # Split on $$...$$
+        disp_split = re.split(r"(\$\$.*?\$\$)", text, flags=re.S)
+        disp_out = []
+        for chunk in disp_split:
+            if chunk.startswith("$$") and chunk.endswith("$$"):
+                disp_out.append(chunk)  # leave math unchanged
+            else:
+                # Now split this chunk on inline $...$
+                inl_split = re.split(r"(\$.*?\$)", chunk, flags=re.S)
+                for sub in inl_split:
+                    if sub.startswith("$") and sub.endswith("$"):
+                        disp_out.append(sub)  # inline math unchanged
+                    else:
+                        disp_out.append(esc(sub))
+        return "".join(disp_out)
+
+    def _balance_dollars(text: str) -> str:
+        # Very conservative: if a line has an odd number of $ (and not $$),
+        # append one $ at the end to balance. Skip lines already containing $$.
+        fixed = []
+        for ln in text.splitlines():
+            if "$$" in ln:
+                fixed.append(ln)
+                continue
+            if ln.count("$") % 2 == 1:
+                fixed.append(ln + "$")
+            else:
+                fixed.append(ln)
+        return "\n".join(fixed)
+
+    out = []
+    for i, part in enumerate(parts):
+        if i % 2 == 1:
+            # code fence: leave exactly as-is
+            out.append(part)
+        else:
+            t = part
+            t = _normalize_math_delims(t)
+            t = _force_math_for_cmds(t)
+            t = _escape_latex_specials(t)
+            t = _balance_dollars(t)
+            out.append(t)
+    return "".join(out)
 
 
 def markdown_to_pdf(md_text, output_path="output.pdf"):
-    pypandoc.get_pandoc_version()
-    pypandoc.convert_text(
-        md_text,  # <-- use the argument
-        to="pdf",
-        format="markdown+raw_tex+tex_math_dollars+tex_math_single_backslash",
-        outputfile=output_path,
-        extra_args=[
-            "--standalone",
-            "-V",
-            "geometry:margin=1in",
-            "--pdf-engine=xelatex",  # unicode-safe
-        ],
+    header_tex = r"""
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{unicode-math}
+\usepackage{physics}
+\usepackage{siunitx}
+"""
+    import tempfile, os
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tex", delete=False) as hf:
+        hf.write(header_tex)
+        header_path = hf.name
+
+    try:
+        pypandoc.get_pandoc_version()
+        pypandoc.convert_text(
+            md_text,
+            to="pdf",
+            # ✅ switch away from gfm
+            format="markdown+tex_math_dollars+raw_tex",
+            outputfile=output_path,
+            extra_args=[
+                "--standalone",
+                "--pdf-engine=xelatex",
+                "--include-in-header",
+                header_path,
+                "-V",
+                "geometry:margin=1in",
+                "--log=build.log",
+            ],
+        )
+    finally:
+        try:
+            os.remove(header_path)
+        except:
+            pass
+
+
+def actually_fix_markdown(md):
+    client = genai.Client()
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=f"Fix the syntax errors in the following markdown code, return only the markdown code: \n\n{md}",
     )
 
-
-################################ Example usage ##########################################
-if __name__ == "__main__":
-    topic = "Python"
-    subtopics = ["Loops", "Functions", "OOP"]
-    file = "python.pdf"
-    try:
-        pkt = find_textbook_packet(
-            topic=topic,
-            subtopics=subtopics,
-            grade_level="undergraduate",
-            max_sections=6,
-            quiz_per_section=3,
-            debug=True,  # prints HTTP status and body head
-        )
-        md = textbook_json_to_markdown(pkt)
-        fixed_md = fix_markdown(md)
-        # print(f"\n\n####################################\n\n{fixed_md}")
-        #### default, change later
-        problems = create_practice_problems(
-            topic=topic,
-            subtopics=subtopics,
-            grade_level="undergrad",
-            num_problems=5,
-        )
-
-        PAGEBREAK = "\n\n\\newpage\n\n"  # blank lines around are important
-
-        problems_questions = ["# Practice Problems", ""]
-        problems_solutions = ["# Solutions", ""]
-        problems_sources = ["# Sources", ""]
-
-        for i, p in enumerate(problems, 1):
-            # Use proper headings; no '---' lines (those create <hr/>)
-            problems_questions.append(p["question"].rstrip())
-            problems_questions.append("")  # blank line to end block
-
-            problems_solutions.append(f"## Problem {i}")
-            problems_solutions.append(p["solution"].rstrip())
-            problems_solutions.append("")
-
-            problems_sources.append(
-                f"- {p['source_title']} — {p['source_url']} | {p['license']}"
-            )
-        problems_sources.append("")
-
-        problems_sources.append("")  # trailing newline
-
-        questions_md = "\n\n\n".join(problems_questions)
-        solutions_md = "\n\n\n".join(problems_solutions)
-        sources_md = "\n".join(problems_sources)
-
-        # ----- Apply your fixer only to content, not page-break tokens -----
-        fixed_main_md = fix_markdown(md)  # your textbook part
-        fixed_q_md = ensure_math_mode(fix_markdown(questions_md))
-        fixed_s_md = ensure_math_mode(fix_markdown(solutions_md))
-        # DO NOT run the fixer over `sources_md` if it tends to strip list items or links.
-        fixed_sources_md = sources_md
-
-        # ----- Assemble final document with explicit breaks between blocks -----
-        packet_md = (
-            fixed_main_md
-            + PAGEBREAK
-            + fixed_q_md
-            + PAGEBREAK
-            + fixed_s_md
-            + PAGEBREAK
-            + fixed_sources_md
-        )
-
-        with open("Vectors_Packet.md", "w", encoding="utf-8") as f:
-            f.write(packet_md)
-
-        markdown_to_pdf(packet_md, output_path="Vectors_Packet.pdf")
-
-    except Exception as e:
-        print("\n[FATAL]", e)
+    return response.text[len("```markdown\n") : -3].strip()
 
 
 def search_topic(topic, subtopics, grade_level, num_problems):
@@ -633,7 +690,7 @@ def search_topic(topic, subtopics, grade_level, num_problems):
             grade_level=grade_level,
             max_sections=len(subtopics) + 2,
             quiz_per_section=3,
-            debug=True,  # prints HTTP status and body head
+            debug=False,  # prints HTTP status and body head
         )
         md = textbook_json_to_markdown(pkt)
 
@@ -643,6 +700,7 @@ def search_topic(topic, subtopics, grade_level, num_problems):
             subtopics=subtopics,
             grade_level=grade_level,
             num_problems=num_problems,
+            debug=False,
         )
 
         # Cleans practice problems into markdown format
@@ -653,11 +711,16 @@ def search_topic(topic, subtopics, grade_level, num_problems):
         problems_sources = ["# Sources", ""]
 
         for i, p in enumerate(problems, 1):
-            problems_questions.append(p["question"].rstrip())
-            problems_questions.append("")
+            q = strip_leading_numbering(p["question"])
+            s = strip_leading_numbering(p["solution"])
+
+            # Use headings for stable numbering (avoids Markdown ordered-list quirks with math blocks)
+            problems_questions.append(f"## Problem {i}")
+            problems_questions.append(q)
+            problems_questions.append("")  # spacer
 
             problems_solutions.append(f"## Problem {i}")
-            problems_solutions.append(p["solution"].rstrip())
+            problems_solutions.append(s)
             problems_solutions.append("")
 
             problems_sources.append(
@@ -672,9 +735,19 @@ def search_topic(topic, subtopics, grade_level, num_problems):
         sources_md = "\n".join(problems_sources)
 
         # Fixing markdown formatting
-        fixed_main_md = fix_markdown(md)  # your textbook part
-        fixed_q_md = ensure_math_mode(fix_markdown(questions_md))
-        fixed_s_md = ensure_math_mode(fix_markdown(solutions_md))
+        # fixed_main_md = fix_markdown(md)  # your textbook part
+        # # fixed_q_md    = ensure_math_mode(fix_markdown(questions_md))
+        # # fixed_s_md    = ensure_math_mode(fix_markdown(solutions_md))
+        # fixed_q_md    = fix_markdown(questions_md)
+        # fixed_s_md    = fix_markdown(solutions_md)
+        fixed_main_md = fix_markdown(md)
+        fixed_q_md = fix_markdown(questions_md)
+        fixed_s_md = fix_markdown(solutions_md)
+
+        # Sanitize for LaTeX robustness
+        fixed_main_md = sanitize_markdown_for_latex(fixed_main_md)
+        fixed_q_md = sanitize_markdown_for_latex(fixed_q_md)
+        fixed_s_md = sanitize_markdown_for_latex(fixed_s_md)
         # no need to run on sources
 
         # ----- Assemble final document with explicit breaks between blocks -----
@@ -688,13 +761,14 @@ def search_topic(topic, subtopics, grade_level, num_problems):
             + sources_md
         )
 
-        hashed_part = sha256(
-            datetime.now().strftime("%d/%m/%YT%H:%M:%S").encode("utf-8")
-        ).hexdigest()
+        fixed_packet_md = actually_fix_markdown(packet_md)
+
+        open(f"test.md", "w").write(fixed_packet_md)
+
+        # fixed_packet_md = fixed_packet_md.replace('\\$', '$')
 
         markdown_to_pdf(
-            packet_md,
-            output_path=f"{BASE_PATH}/static/pdfs/{topic}_Packet_for_{grade_level}_{hashed_part}.pdf",
+            fixed_packet_md, output_path=f"{topic}_Packet_for_{grade_level}.pdf"
         )
 
         return f"{topic}_Packet_for_{grade_level}_{hashed_part}.pdf"
@@ -702,3 +776,7 @@ def search_topic(topic, subtopics, grade_level, num_problems):
     except Exception as e:
         print("\n[FATAL]", e)
         return None
+
+
+# Example usage:
+# print(search_topic("Civil War", ["Slave Trade", "Abraham Lincoln", "Battle of Gettysburg"], "middle school", 3))
