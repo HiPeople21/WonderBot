@@ -34,7 +34,7 @@
 						<nav>
 							<ul>
 								<li><a href="#create">Create</a></li>
-								<li><a href="#search">Search</a></li>
+								<li><a href="#list">List</a></li>
 								<li style="display: none"><a href="#viewer"></a></li>
 							</ul>
 						</nav>
@@ -71,19 +71,21 @@
 								</form>
                             </article>
 
-							<article id="search">
-								<h2 class="major">Search</h2>
-                                <form method="POST" id="search-form">
-									<div class="fields">
-										<div class="field">
-											<label for="search-input">What would you like to learn about?</label>
-											<input type="text" name="search" id="search-input" required/>
-										</div>
+							<article id="list">
+								<h2 class="major">List</h2>
+								<div class="fields">
+									<div class="field">
+										<label for="search-input">What would you like to learn about?</label>
+										<input type="text" name="search" id="search-input" required/>
 									</div>
-									<ul class="actions">
-										<li><input type="submit" value="Search" class="primary" /></li>
-									</ul>
-								</form>
+								</div>
+								<div class="table-wrapper">
+									<table>
+										<tbody id="pdfs-list">
+
+										</tbody>
+									</table>
+								</div>
                             </article>
 
 							<article id="viewer">

@@ -1,5 +1,6 @@
 import os
 import json
+import pathlib
 from flask import (
     Flask,
     render_template,
@@ -11,6 +12,9 @@ from perplexity import Perplexity
 from search import search_topic
 
 load_dotenv()
+
+BASE_PATH = pathlib.Path(__file__).parent
+pdfs_dir = BASE_PATH / "static/pdfs"
 
 app = Flask(
     __name__,
@@ -88,6 +92,12 @@ def create():
             "subtopics": subtopics,
         }
     )
+
+
+@app.route("/list", methods=["POST"])
+def list_pdfs():
+    """Lists already generated PDFs"""
+    return jsonify([str(i.relative_to(pdfs_dir)) for i in pdfs_dir.rglob("*.pdf")])
 
 
 if __name__ == "__main__":
