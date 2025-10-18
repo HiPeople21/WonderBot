@@ -749,6 +749,7 @@ def search_topic(topic, subtopics, grade_level, num_problems):
 
         problems_sources = deduped_sources
         problems_sources.append("")  # trailing newline
+        sources_md = "\n".join(problems_sources)
 
         # Fixing markdown formatting
         # fixed_main_md = fix_markdown(md)  # your textbook part
@@ -781,17 +782,19 @@ def search_topic(topic, subtopics, grade_level, num_problems):
             datetime.now().strftime("%d/%m/%YT%H:%M:%S").encode("utf-8")
         ).hexdigest()
 
-        markdown_to_pdf(
-            packet_md,
-            output_path=f"{BASE_PATH}/static/pdfs/{topic}_Packet_for_{grade_level}_{hashed_part}.pdf",
-        )
         fixed_packet_md = actually_fix_markdown(packet_md)
+
+        markdown_to_pdf(
+            fixed_packet_md,
+            output_path=f'{BASE_PATH}/static/pdfs/{'_'.join(topic.split())}_Packet_for_{'_'.join(grade_level.split())}_{hashed_part}.pdf',
+        )
+        
 
         open("test.md", "w").write(fixed_packet_md)
 
         # fixed_packet_md = fixed_packet_md.replace('\\$', '$')
 
-        return f"{topic}_Packet_for_{grade_level}_{hashed_part}.pdf"
+        return f'{('_').join(topic.split())}_Packet_for_{'_'.join(grade_level.split())}_{hashed_part}.pdf'
 
     except Exception as e:
         print("\n[FATAL]", e)
@@ -799,4 +802,4 @@ def search_topic(topic, subtopics, grade_level, num_problems):
 
 
 # Example usage:
-# print(search_topic("Civil War", ["Slave Trade", "Abraham Lincoln", "Battle of Gettysburg"], "middle school", 3))
+print(search_topic("Civil War", ["Slave Trade", "Abraham Lincoln", "Battle of Gettysburg"], "middle school", 3))
