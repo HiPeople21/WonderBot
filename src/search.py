@@ -1,6 +1,7 @@
-import os, json, requests
+import os
+import json
+import requests
 from dotenv import load_dotenv
-from google import genai
 from datetime import datetime
 import re
 import pypandoc
@@ -9,29 +10,31 @@ load_dotenv()
 
 PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-gemini_client = genai.Client()
 
 def json_sanitize(s: str):
     try:
         return json.loads(s)
     except Exception:
-        for a,b in [("{","}"),("[","]")]:
+        for a, b in [("{", "}"), ("[", "]")]:
             i, j = s.find(a), s.rfind(b)
             if i != -1 and j != -1 and j > i:
-                try: return json.loads(s[i:j+1])
-                except Exception: pass
+                try:
+                    return json.loads(s[i : j + 1])
+                except Exception:
+                    pass
     return None
+
 
 def assert_api_key():
     if not PERPLEXITY_API_KEY or PERPLEXITY_API_KEY.strip() == "":
         raise RuntimeError("PERPLEXITY_API_KEY is missing or empty")
-    
+
 
 ########################################################################################
 # ----------------- Generates Textbook-style Lessons -----------------
 ########################################################################################
+
 
 def create_lesson(messages, *, temperature=0.2, max_tokens=8000, debug=True):
     assert_api_key()
@@ -41,11 +44,11 @@ def create_lesson(messages, *, temperature=0.2, max_tokens=8000, debug=True):
         "content-type": "application/json",
     }
     payload = {
-        "model": "sonar-pro",                # try "sonar" if you get 400 / access errors
+        "model": "sonar-pro",  # try "sonar" if you get 400 / access errors
         "messages": messages,
         "temperature": temperature,
         "top_p": 0.9,
-        "max_tokens": max_tokens,            # raise cap to reduce truncation
+        "max_tokens": max_tokens,  # raise cap to reduce truncation
         "stream": False,
         "enable_search_classifier": True,
         "return_search_results": False,
@@ -75,41 +78,74 @@ def create_lesson(messages, *, temperature=0.2, max_tokens=8000, debug=True):
         raise RuntimeError(f"No content returned: {json.dumps(data)[:800]}")
     return content
 
+
 SCHEMA_HINT = {
     "type": "object",
-    "required": ["title","learning_path","sections","summary","estimated_total_read_time_minutes"],
+    "required": [
+        "title",
+        "learning_path",
+        "sections",
+        "summary",
+        "estimated_total_read_time_minutes",
+    ],
     "properties": {
-        "title": {"type":"string"},
-        "learning_path": {"type":"array","items":{"type":"string"}},
+        "title": {"type": "string"},
+        "learning_path": {"type": "array", "items": {"type": "string"}},
         "sections": {
-            "type":"array",
-            "items":{
-                "type":"object",
-                "required":[
-                    "title","overview","key_points","formulas",
-                    "diagram","worked_example","common_pitfalls","mini_quiz"
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "title",
+                    "overview",
+                    "key_points",
+                    "formulas",
+                    "diagram",
+                    "worked_example",
+                    "common_pitfalls",
+                    "mini_quiz",
                 ],
-                "properties":{
-                    "title":{"type":"string"},
-                    "overview":{"type":"string"},
-                    "key_points":{"type":"array","items":{"type":"string"}},
-                    "formulas":{"type":"array","items":{"type":"string"}},
-                    "derivations":{"type":"string"},
-                    "diagram":{"type":"object","required":["caption","instructions"],
-                               "properties":{"caption":{"type":"string"},"instructions":{"type":"string"}}},
-                    "worked_example":{"type":"object","required":["prompt","steps","answer"],
-                                      "properties":{"prompt":{"type":"string"},
-                                                    "steps":{"type":"array","items":{"type":"string"}},
-                                                    "answer":{"type":"string"}}},
-                    "common_pitfalls":{"type":"array","items":{"type":"string"}},
-                    "mini_quiz":{"type":"array","items":{"type":"object","required":["q","a"],
-                                  "properties":{"q":{"type":"string"},"a":{"type":"string"}}}}
-                }
-            }
+                "properties": {
+                    "title": {"type": "string"},
+                    "overview": {"type": "string"},
+                    "key_points": {"type": "array", "items": {"type": "string"}},
+                    "formulas": {"type": "array", "items": {"type": "string"}},
+                    "derivations": {"type": "string"},
+                    "diagram": {
+                        "type": "object",
+                        "required": ["caption", "instructions"],
+                        "properties": {
+                            "caption": {"type": "string"},
+                            "instructions": {"type": "string"},
+                        },
+                    },
+                    "worked_example": {
+                        "type": "object",
+                        "required": ["prompt", "steps", "answer"],
+                        "properties": {
+                            "prompt": {"type": "string"},
+                            "steps": {"type": "array", "items": {"type": "string"}},
+                            "answer": {"type": "string"},
+                        },
+                    },
+                    "common_pitfalls": {"type": "array", "items": {"type": "string"}},
+                    "mini_quiz": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["q", "a"],
+                            "properties": {
+                                "q": {"type": "string"},
+                                "a": {"type": "string"},
+                            },
+                        },
+                    },
+                },
+            },
         },
-        "summary":{"type":"string"},
-        "estimated_total_read_time_minutes":{"type":"integer"}
-    }
+        "summary": {"type": "string"},
+        "estimated_total_read_time_minutes": {"type": "integer"},
+    },
 }
 
 SYSTEM_MSG = (
@@ -118,8 +154,15 @@ SYSTEM_MSG = (
     "No citations, links, or markdown. Return ONLY valid JSON."
 )
 
-def find_textbook_packet(topic: str, subtopics: list[str], grade_level: str,
-                         max_sections: int = 6, quiz_per_section: int = 3, debug=True) -> dict:
+
+def find_textbook_packet(
+    topic: str,
+    subtopics: list[str],
+    grade_level: str,
+    max_sections: int = 6,
+    quiz_per_section: int = 3,
+    debug=True,
+) -> dict:
     subtopics_txt = ", ".join(subtopics) if subtopics else "—"
     user_msg = f"""
 Create a condensed, concise textbook-style packet for a {grade_level} student.
@@ -143,10 +186,12 @@ Return ONLY valid JSON matching this schema (no prose outside JSON):
 """.strip()
 
     content = create_lesson(
-        [{"role": "system", "content": SYSTEM_MSG},
-         {"role": "user", "content": user_msg}],
+        [
+            {"role": "system", "content": SYSTEM_MSG},
+            {"role": "user", "content": user_msg},
+        ],
         max_tokens=8000,
-        debug=debug
+        debug=debug,
     )
     parsed = json_sanitize(content)
     if not parsed:
@@ -154,21 +199,24 @@ Return ONLY valid JSON matching this schema (no prose outside JSON):
         return {
             "title": f"{topic} — Learning Packet",
             "learning_path": subtopics or [topic],
-            "sections": [{
-                "title":"Overview",
-                "overview":"Content unavailable due to JSON parse or token limit.",
-                "key_points":[],
-                "formulas":[],
-                "derivations":"",
-                "diagram":{"caption":"—","instructions":"—"},
-                "worked_example":{"prompt":"—","steps":[],"answer":"—"},
-                "common_pitfalls":[],
-                "mini_quiz":[]
-            }],
-            "summary":"Generation failed softly; check API logs.",
-            "estimated_total_read_time_minutes": 3
+            "sections": [
+                {
+                    "title": "Overview",
+                    "overview": "Content unavailable due to JSON parse or token limit.",
+                    "key_points": [],
+                    "formulas": [],
+                    "derivations": "",
+                    "diagram": {"caption": "—", "instructions": "—"},
+                    "worked_example": {"prompt": "—", "steps": [], "answer": "—"},
+                    "common_pitfalls": [],
+                    "mini_quiz": [],
+                }
+            ],
+            "summary": "Generation failed softly; check API logs.",
+            "estimated_total_read_time_minutes": 3,
         }
     return parsed
+
 
 ########################################################################################
 # ----------------- Generates Practice Problems via Web Search -----------------
@@ -184,6 +232,7 @@ Prefer openly licensed or university sources where verbatim copying is permitted
 - Any *.edu domain with problem sets or PDF solutions
 Avoid: paywalled sites, copyrighted textbooks without open licenses, commercial worksheets.
 """
+
 
 def build_messages(topic, subtopics, grade_level, num_problems):
     subtopics_txt = ", ".join(subtopics) if subtopics else "—"
@@ -202,15 +251,23 @@ def build_messages(topic, subtopics, grade_level, num_problems):
         "maxItems": num_problems,
         "items": {
             "type": "object",
-            "required": ["question", "solution", "source_title", "source_url", "license"],
+            "required": [
+                "question",
+                "solution",
+                "source_title",
+                "source_url",
+                "license",
+            ],
             "properties": {
-                "question": {"type": "string"},     # verbatim
-                "solution": {"type": "string"},     # verbatim
+                "question": {"type": "string"},  # verbatim
+                "solution": {"type": "string"},  # verbatim
                 "source_title": {"type": "string"},
                 "source_url": {"type": "string"},
-                "license": {"type": "string"}       # e.g., "MIT OCW CC BY-NC-SA", "University PDF (educational use)"
-            }
-        }
+                "license": {
+                    "type": "string"
+                },  # e.g., "MIT OCW CC BY-NC-SA", "University PDF (educational use)"
+            },
+        },
     }
 
     user = f"""
@@ -245,8 +302,9 @@ Important format rules:
 
     return [
         {"role": "system", "content": system},
-        {"role": "user", "content": user + "\n\n" + domain_bias}
+        {"role": "user", "content": user + "\n\n" + domain_bias},
     ]
+
 
 def _strict_json_load(maybe_json: str):
     """Best-effort to recover a JSON array if the model wraps it in stray text."""
@@ -255,12 +313,15 @@ def _strict_json_load(maybe_json: str):
     except json.JSONDecodeError:
         start, end = maybe_json.find("["), maybe_json.rfind("]")
         if start != -1 and end != -1:
-            return json.loads(maybe_json[start:end+1])
+            return json.loads(maybe_json[start : end + 1])
         raise
+
 
 def _validate_items(items, num_expected):
     if not isinstance(items, list) or len(items) != num_expected:
-        raise ValueError(f"Expected exactly {num_expected} items, got {len(items) if isinstance(items, list) else 'non-list'}")
+        raise ValueError(
+            f"Expected exactly {num_expected} items, got {len(items) if isinstance(items, list) else 'non-list'}"
+        )
     url_re = re.compile(r"^https?://", re.I)
     for i, it in enumerate(items, 1):
         for k in ["question", "solution", "source_title", "source_url", "license"]:
@@ -269,12 +330,23 @@ def _validate_items(items, num_expected):
         if not url_re.match(it["source_url"]):
             raise ValueError(f"Item {i} has invalid source_url: {it['source_url']}")
         # Basic verbatim sanity: avoid obvious paraphrase markers
-        if "paraphrase" in it["question"].lower() or "paraphrase" in it["solution"].lower():
+        if (
+            "paraphrase" in it["question"].lower()
+            or "paraphrase" in it["solution"].lower()
+        ):
             raise ValueError(f"Item {i} looks paraphrased.")
     return True
 
-def create_practice_problems(topic, subtopics, grade_level, num_problems,
-                             max_tokens=8000, temperature=0.2, debug=True):
+
+def create_practice_problems(
+    topic,
+    subtopics,
+    grade_level,
+    num_problems,
+    max_tokens=8000,
+    temperature=0.2,
+    debug=True,
+):
     """
     Uses Perplexity Sonar to fetch EXACTLY `num_problems` practice problems with verbatim questions & solutions
     from credible/open sources (preferring MIT OCW, OpenStax, and .edu problem sets).
@@ -297,7 +369,7 @@ def create_practice_problems(topic, subtopics, grade_level, num_problems,
         "max_tokens": max_tokens,
         "stream": False,
         "enable_search_classifier": True,
-        "return_search_results": True,   # helpful for auditing sources
+        "return_search_results": True,  # helpful for auditing sources
     }
 
     try:
@@ -327,44 +399,62 @@ def create_practice_problems(topic, subtopics, grade_level, num_problems,
     _validate_items(items, num_problems)
     return items
 
+
 ##########################################################################################
 # ------------------------------------ Formatting ----------------------------------------
 ##########################################################################################
 
+
 def textbook_json_to_markdown(packet: dict) -> str:
-    md = [f"# {packet.get('title','Learning Packet')}\n"]
-    md.append(f"**Estimated reading time:** {packet.get('estimated_total_read_time_minutes','~')} minutes\n")
+    md = [f"# {packet.get('title', 'Learning Packet')}\n"]
+    md.append(
+        f"**Estimated reading time:** {packet.get('estimated_total_read_time_minutes', '~')} minutes\n"
+    )
     lp = packet.get("learning_path") or []
-    if lp: md.append("**Learning order:** " + " → ".join(lp) + "\n")
+    if lp:
+        md.append("**Learning order:** " + " → ".join(lp) + "\n")
     for section in packet.get("sections", []):
-        md.append(f"## {section.get('title','Section')}\n")
-        if section.get("overview"): md.append(section["overview"] + "\n")
+        md.append(f"## {section.get('title', 'Section')}\n")
+        if section.get("overview"):
+            md.append(section["overview"] + "\n")
         if section.get("key_points"):
             md.append("**Key points:**")
-            for p in section["key_points"]: md.append(f"- {p}")
+            for p in section["key_points"]:
+                md.append(f"- {p}")
         if section.get("formulas"):
             md.append("**Formulas:**")
-            for f in section["formulas"]: md.append(f"- `{f}`")
+            for f in section["formulas"]:
+                md.append(f"- `{f}`")
         if section.get("derivations"):
-            md.append("**Sketch derivation:**"); md.append(section["derivations"])
+            md.append("**Sketch derivation:**")
+            md.append(section["derivations"])
         if section.get("worked_example"):
-            ex = section["worked_example"]; md.append("\n**Worked Example:**")
-            if ex.get("prompt"): md.append(f"*{ex['prompt']}*")
-            for step in ex.get("steps", []): md.append(f"  - {step}")
-            if ex.get("answer"): md.append(f"**Answer:** {ex['answer']}\n")
+            ex = section["worked_example"]
+            md.append("\n**Worked Example:**")
+            if ex.get("prompt"):
+                md.append(f"*{ex['prompt']}*")
+            for step in ex.get("steps", []):
+                md.append(f"  - {step}")
+            if ex.get("answer"):
+                md.append(f"**Answer:** {ex['answer']}\n")
         if section.get("diagram"):
-            d = section["diagram"]; md.append("**Diagram:** " + d.get("caption",""))
-            if d.get("instructions"): md.append("Instructions: " + d["instructions"])
+            d = section["diagram"]
+            md.append("**Diagram:** " + d.get("caption", ""))
+            if d.get("instructions"):
+                md.append("Instructions: " + d["instructions"])
         if section.get("common_pitfalls"):
             md.append("**Common Pitfalls:**")
-            for p in section["common_pitfalls"]: md.append(f"- {p}")
+            for p in section["common_pitfalls"]:
+                md.append(f"- {p}")
         if section.get("mini_quiz"):
             md.append("**Quick Quiz:**")
             for qa in section["mini_quiz"]:
-                md.append(f"- {qa.get('q','')}  \n  **Ans:** {qa.get('a','')}")
+                md.append(f"- {qa.get('q', '')}  \n  **Ans:** {qa.get('a', '')}")
         md.append("\n---\n")
-    if packet.get("summary"): md.append("## Summary\n" + packet["summary"])
+    if packet.get("summary"):
+        md.append("## Summary\n" + packet["summary"])
     return "\n".join(md)
+
 
 def fix_markdown(markdown):
     headers = {
@@ -377,19 +467,26 @@ def fix_markdown(markdown):
         "messages": [
             {
                 "role": "system",
-                "content": "Do not search the web, only process and reformat text provided by the user."
+                "content": "Ignore any previous math formatting instructions. "
+                "Always output inline math expressions wrapped in single dollar signs `$...$`. "
+                "For display math use `$$...$$`. "
+                "Do not use alternative delimiters like \\(...\\) or \\[...\\]."
+                "Do not search the web, only process and reformat text provided by the user.",
             },
             {
                 "role": "user",
-                "content": f"Reformat the following text into correctly formatted markdown code. Format it such that the equations are centered on the page and are easy to identify and read. Only return the markdown code. Do not use HTML, use \\[\\] format for centering:\n\n{markdown}"
-            }
+                "content": f"Reformat the following text into correctly formatted markdown code. Format it such that the equations are centered on the page and are easy to identify and read. Only return the markdown code. Do not use HTML, use \\[\\] format for centering:\n\n{markdown}.",
+            },
         ],
         "max_tokens": 16000,
-        "temperature": 0.3
+        "temperature": 0.3,
     }
 
     response = requests.post(PERPLEXITY_API_URL, headers=headers, json=payload)
-    return response.json()["choices"][0]["message"]["content"][len("```markdown\n"):-3]
+    return response.json()["choices"][0]["message"]["content"][
+        len("```markdown\n") : -3
+    ]
+
 
 def markdown_to_pdf(md_text, output_path="output.pdf"):
     """
@@ -414,11 +511,12 @@ def markdown_to_pdf(md_text, output_path="output.pdf"):
         to="pdf",
         format="md",
         outputfile=output_path,
-        extra_args=["--standalone"]
+        extra_args=["--standalone", "-V", "geometry:margin=1in"],
     )
 
     print(f"✅ PDF created at: {os.path.abspath(output_path)}")
     return output_path
+
 
 ################################ Example usage ##########################################
 if __name__ == "__main__":
@@ -429,7 +527,7 @@ if __name__ == "__main__":
             grade_level="undergraduate",
             max_sections=6,
             quiz_per_section=3,
-            debug=True     # prints HTTP status and body head
+            debug=True,  # prints HTTP status and body head
         )
         md = textbook_json_to_markdown(pkt)
         fixed_md = fix_markdown(md)
@@ -445,19 +543,31 @@ if __name__ == "__main__":
         problems_solutions = ["Solutions:\n"]
         problems_sources = ["Sources:\n"]
         for i in range(len(problems)):
-            problems_questions.append(f"\n--- Problem {i} ---")
-            problems_sources.append(f"Source: {problems[i]['source_title']} {problems[i]['source_url']} | {problems[i]['license']}\n")
-            problems_questions.append(f"{i+1}: {problems[i]['question']}\n")
-            problems_solutions.append(f"{i+1}: {problems[i]['solution']}\n")
+            problems_questions.append(f"\n--- Problem {i + 1} ---")
+            problems_sources.append(
+                f"Source: {problems[i]['source_title']} {problems[i]['source_url']} | {problems[i]['license']}\n"
+            )
+            problems_questions.append(f"{i + 1}: {problems[i]['question']}\n")
+            problems_solutions.append(f"{i + 1}: {problems[i]['solution']}\n")
 
-        print(f"\n\n#############################################\n\nSources: {problems_sources}\n\n")
+        print(
+            f"\n\n#############################################\n\nSources: {problems_sources}\n\n"
+        )
 
-        problems_md = "\n".join(problems_questions) + "\n" + "\n".join(problems_solutions) + "\n" + "\n".join(problems_sources)
+        problems_md = (
+            "\n".join(problems_questions)
+            + "\n"
+            + "\n".join(problems_solutions)
+            + "\n"
+            + "\n".join(problems_sources)
+        )
 
         fixed_questions_md = fix_markdown(problems_md)
         # print(f"\n\n####################################\n\n{fixed_md}\n\n{fixed_questions_md}")
 
-        markdown_to_pdf(fixed_md + "\n\n" + fixed_questions_md, output_path="Vectors_Packet.pdf")
+        markdown_to_pdf(
+            fixed_md + "\n\n" + fixed_questions_md, output_path="Vectors_Packet.pdf"
+        )
 
     except Exception as e:
         print("\n[FATAL]", e)
