@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+from hashlib import sha256
 import pathlib
 from dotenv import load_dotenv
 from datetime import datetime
@@ -687,13 +688,16 @@ def search_topic(topic, subtopics, grade_level, num_problems):
             + sources_md
         )
 
+        hashed_part = sha256(
+            datetime.now().strftime("%d/%m/%YT%H:%M:%S").encode("utf-8")
+        ).hexdigest()
+
         markdown_to_pdf(
             packet_md,
-            output_path=str(BASE_PATH)
-            + f"/static/pdfs/{topic}_Packet_for_{grade_level}.pdf",
+            output_path=f"{BASE_PATH}/static/pdfs/{topic}_Packet_for_{grade_level}_{hashed_part}.pdf",
         )
 
-        return f"{topic}_Packet_for_{grade_level}.pdf"
+        return f"{topic}_Packet_for_{grade_level}_{hashed_part}.pdf"
 
     except Exception as e:
         print("\n[FATAL]", e)

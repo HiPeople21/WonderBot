@@ -30,8 +30,9 @@ window.addEventListener("load", async () => {
             const data = await response.json();
             
             if (data["pdf_path"] === null) {  // An error occurred
-                alert("Something went wrong, please try again.")
-                return
+                alert("Something went wrong, please try again.");
+                loading.style.display = "none";
+                return;
             }
 
             loading.style.display = "none";
