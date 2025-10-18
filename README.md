@@ -10,8 +10,15 @@ process, intended to help users start learning more quickly and easily.
 
 We used the Perplexity API as a search and generation medium. The results are condensed
 into a PDF, which contains all the questions and reading resources that a beginner needs.
+All materials used are based from academic sources, providing high quality materials.
 The icons and interface are user friendly.
 
+WonderBot generated PDFs are available to everyone to view and download, as all generated PDFs
+are accessible via the "List" page. This means that one may find previously generated resources,
+which saves them time and effort. 
+
+An easy form is displayed on the "Create" page, where the user enters a topic prompt, number of exercises,
+and grade level. Perplexity is used to break the topic prompt into the main topic as well as many subtopics.
 
 Team details:
 
