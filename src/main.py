@@ -26,6 +26,8 @@ API_KEY = os.getenv("PPLX_API_KEY")
 
 @app.route("/", methods=["GET", "POST"])
 def home():
+    if request.method == "POST":
+        print(request.form)
     return render_template("index.html")
 
 
