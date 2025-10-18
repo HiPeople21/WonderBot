@@ -79,7 +79,7 @@ def create():
     subtopics = topics["subtopics"]
 
     # Generate the learning packet
-    pdf_path = search_topic(main_topic, subtopics, exercise_count, grade_level)
+    pdf_path = search_topic(main_topic, subtopics, grade_level, exercise_count)
 
     # Return JSON so the frontend can handle it directly
     return jsonify({
