@@ -15,9 +15,9 @@ The icons and interface are user friendly.
 
 Team details:
 
-YuDong Zhao: Product assistant, database administrator 
-Yubo Wang: Frontend engineer, project manager https://www.linkedin.com/in/yubo-wang-b541302b3/ 
-Stanley Hoo: Python backend developer
+- YuDong Zhao: Product assistant, database administrator 
+- Yubo Wang: Frontend engineer, project manager https://www.linkedin.com/in/yubo-wang-b541302b3/ 
+- Stanley Hoo: Python backend developer
 
 
 Background video by: https://www.pexels.com/@joel-dunn-98388/
