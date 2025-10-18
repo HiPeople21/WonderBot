@@ -450,7 +450,7 @@ def textbook_json_to_markdown(packet: dict) -> str:
             md.append("**Quick Quiz:**")
             for qa in section["mini_quiz"]:
                 md.append(f"- {qa.get('q', '')}  \n  **Ans:** {qa.get('a', '')}")
-        md.append("\n---\n")
+        md.append("\n\n")
     if packet.get("summary"):
         md.append("## Summary\n" + packet["summary"])
     return "\n".join(md)
@@ -487,35 +487,47 @@ def fix_markdown(markdown):
         len("```markdown\n") : -3
     ]
 
+# commands that must be inside math mode
+_MATH_CMDS = r"(vec|frac|cdot|times|ldots|nabla|partial|sqrt|sum|prod|int|lim|log|ln|sin|cos|tan|alpha|beta|gamma|Delta|leq|geq|pm)"
+
+def ensure_math_mode(md: str) -> str:
+    lines, out = md.splitlines(), []
+    for ln in lines:
+        # already math? skip
+        if any(tok in ln for tok in ("\\[", "\\]", "\\(", "\\)", "$", "\\begin{align", "\\begin{equation}")):
+            out.append(ln)
+            continue
+
+        # contains math commands but no math delimiters → wrap whole line
+        if re.search(rf"\\{_MATH_CMDS}\\b", ln):
+            ln = f"${ln}$"
+
+        # fix common artifacts (e.g., '\$.' should be '$.')
+        ln = ln.replace("\\$.", "$.")
+        ln = ln.replace("\\$", "$")
+
+        # balance odd number of $ (rare, but prevents LaTeX choke)
+        if ln.count("$") % 2 == 1:
+            ln += "$"
+
+        out.append(ln)
+    return "\n".join(out)
+
+
 
 def markdown_to_pdf(md_text, output_path="output.pdf"):
-    """
-    Converts a Markdown string to a nicely formatted PDF file.
-
-    Args:
-        md_text (str): The Markdown text to convert.
-        output_path (str): Path for the resulting PDF file.
-
-    Returns:
-        str: Path to the generated PDF.
-    """
-    # Ensure pandoc is available
-    try:
-        pypandoc.get_pandoc_version()
-    except OSError:
-        raise RuntimeError("Pandoc is not installed. Please install it first.")
-
-    # Convert Markdown → PDF (standalone ensures a full document structure)
+    pypandoc.get_pandoc_version()
     pypandoc.convert_text(
-        md_text,
+        md_text,                                 # <-- use the argument
         to="pdf",
-        format="md",
+        format="markdown+raw_tex+tex_math_dollars+tex_math_single_backslash",
         outputfile=output_path,
-        extra_args=["--standalone", "-V", "geometry:margin=1in"],
+        extra_args=[
+            "--standalone",
+            "-V", "geometry:margin=1in",
+            "--pdf-engine=xelatex",             # unicode-safe
+        ],
     )
-
-    print(f"✅ PDF created at: {os.path.abspath(output_path)}")
-    return output_path
 
 
 ################################ Example usage ##########################################
@@ -532,6 +544,7 @@ if __name__ == "__main__":
         md = textbook_json_to_markdown(pkt)
         fixed_md = fix_markdown(md)
         # print(f"\n\n####################################\n\n{fixed_md}")
+        #### default, change later
         problems = create_practice_problems(
             topic="Vectors",
             subtopics=["Gram-Schmidt", "Vector spaces"],
@@ -539,38 +552,122 @@ if __name__ == "__main__":
             num_problems=5,
         )
 
-        problems_questions = ["Practice Problems:\n"]
-        problems_solutions = ["Solutions:\n"]
-        problems_sources = ["Sources:\n"]
-        for i in range(len(problems)):
-            problems_questions.append(f"\n--- Problem {i + 1} ---")
-            problems_sources.append(
-                f"Source: {problems[i]['source_title']} {problems[i]['source_url']} | {problems[i]['license']}\n"
-            )
-            problems_questions.append(f"{i + 1}: {problems[i]['question']}\n")
-            problems_solutions.append(f"{i + 1}: {problems[i]['solution']}\n")
+        PAGEBREAK = "\n\n\\newpage\n\n"  # blank lines around are important
 
-        print(
-            f"\n\n#############################################\n\nSources: {problems_sources}\n\n"
+        problems_questions = ["# Practice Problems", ""]
+        problems_solutions = ["# Solutions", ""]
+        problems_sources   = ["# Sources", ""]
+
+        for i, p in enumerate(problems, 1):
+            # Use proper headings; no '---' lines (those create <hr/>)
+            problems_questions.append(p["question"].rstrip())
+            problems_questions.append("")  # blank line to end block
+
+            problems_solutions.append(f"## Problem {i}")
+            problems_solutions.append(p["solution"].rstrip())
+            problems_solutions.append("")
+
+            problems_sources.append(f"- {p['source_title']} — {p['source_url']} | {p['license']}")
+        problems_sources.append("")
+
+        problems_sources.append("")  # trailing newline
+
+        questions_md = "\n\n\n".join(problems_questions)
+        solutions_md = "\n\n\n".join(problems_solutions)
+        sources_md   = "\n".join(problems_sources)
+
+        # ----- Apply your fixer only to content, not page-break tokens -----
+        fixed_main_md = fix_markdown(md)  # your textbook part
+        fixed_q_md    = ensure_math_mode(fix_markdown(questions_md))
+        fixed_s_md    = ensure_math_mode(fix_markdown(solutions_md))
+        # DO NOT run the fixer over `sources_md` if it tends to strip list items or links.
+        fixed_sources_md = sources_md
+
+        # ----- Assemble final document with explicit breaks between blocks -----
+        packet_md = (
+            fixed_main_md
+            + PAGEBREAK
+            + fixed_q_md
+            + PAGEBREAK
+            + fixed_s_md
+            + PAGEBREAK
+            + fixed_sources_md
         )
 
-        problems_md = (
-            "\n".join(problems_questions)
-            + "\n"
-            + "\n".join(problems_solutions)
-            + "\n"
-            + "\n".join(problems_sources)
-        )
+        with open("Vectors_Packet.md", "w", encoding="utf-8") as f:
+            f.write(packet_md)
 
-        fixed_questions_md = fix_markdown(problems_md)
-        # print(f"\n\n####################################\n\n{fixed_md}\n\n{fixed_questions_md}")
-
-        markdown_to_pdf(
-            fixed_md + "\n\n" + fixed_questions_md, output_path="Vectors_Packet.pdf"
-        )
+        markdown_to_pdf(packet_md, output_path="Vectors_Packet.pdf")
 
     except Exception as e:
         print("\n[FATAL]", e)
 
+def search_topic(topic, subtopics, grade_level, num_problems):
+    try:
+        # Get textbook packet
+        pkt = find_textbook_packet(
+            topic=topic,
+            subtopics=subtopics,
+            grade_level=grade_level,
+            max_sections=len(subtopics) + 2,
+            quiz_per_section=3,
+            debug=True,  # prints HTTP status and body head
+        )
+        md = textbook_json_to_markdown(pkt)
 
-# still need to add sources and still a bit buggy
+        # Create practice problems
+        problems = create_practice_problems(
+            topic=topic,
+            subtopics=subtopics,
+            grade_level=grade_level,
+            num_problems=num_problems,
+        )
+
+        # Cleans practice problems into markdown format
+        PAGEBREAK = "\n\n\\newpage\n\n"  
+
+        problems_questions = ["# Practice Problems", ""]
+        problems_solutions = ["# Solutions", ""]
+        problems_sources   = ["# Sources", ""]
+
+        for i, p in enumerate(problems, 1):
+            problems_questions.append(p["question"].rstrip())
+            problems_questions.append("") 
+
+            problems_solutions.append(f"## Problem {i}")
+            problems_solutions.append(p["solution"].rstrip())
+            problems_solutions.append("")
+
+            problems_sources.append(f"- {p['source_title']} — {p['source_url']} | {p['license']}")
+        problems_sources.append("")
+
+        problems_sources.append("") 
+
+        questions_md = "\n\n\n".join(problems_questions)
+        solutions_md = "\n\n\n".join(problems_solutions)
+        sources_md   = "\n".join(problems_sources)
+
+        # Fixing markdown formatting
+        fixed_main_md = fix_markdown(md)  # your textbook part
+        fixed_q_md    = ensure_math_mode(fix_markdown(questions_md))
+        fixed_s_md    = ensure_math_mode(fix_markdown(solutions_md))
+        # no need to run on sources
+
+        # ----- Assemble final document with explicit breaks between blocks -----
+        packet_md = (
+            fixed_main_md
+            + PAGEBREAK
+            + fixed_q_md
+            + PAGEBREAK
+            + fixed_s_md
+            + PAGEBREAK
+            + sources_md
+        )
+
+        markdown_to_pdf(packet_md, output_path=f'{topic}_Packet_for_{grade_level}.pdf')
+
+        return f'{topic}_Packet_for_{grade_level}.pdf'
+
+    except Exception as e:
+        print("\n[FATAL]", e)
+        return None
