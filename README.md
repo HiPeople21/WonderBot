@@ -22,9 +22,9 @@ and grade level. Perplexity is used to break the topic prompt into the main topi
 
 Team details:
 
-- YuDong Zhao: Product assistant, database administrator 
-- Yubo Wang: Frontend engineer, project manager https://www.linkedin.com/in/yubo-wang-b541302b3/ 
-- Stanley Hoo: Python backend developer
+- YuDong Zhao: Product assistant, database administrator [LinkedIn](https://www.linkedin.com/in/%E6%98%B1%E6%A0%8B-%E8%B5%B5-1ab35138a/)
+- Yubo Wang: Frontend engineer, project manager [LinkedIn](https://www.linkedin.com/in/yubo-wang-b541302b3/)
+- Stanley Hoo: Python backend developer [LinkedIn](https://www.linkedin.com/in/stanley-hoo-a20108331/)
 
 
 Background video by: https://www.pexels.com/@joel-dunn-98388/
