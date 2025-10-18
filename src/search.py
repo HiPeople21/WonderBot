@@ -802,4 +802,4 @@ def search_topic(topic, subtopics, grade_level, num_problems):
 
 
 # Example usage:
-print(search_topic("Civil War", ["Slave Trade", "Abraham Lincoln", "Battle of Gettysburg"], "middle school", 3))
+# print(search_topic("Civil War", ["Slave Trade", "Abraham Lincoln", "Battle of Gettysburg"], "middle school", 3))
