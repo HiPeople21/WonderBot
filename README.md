@@ -1,31 +1,24 @@
-# WonderBot
+# WonderBot: AI-Powered Study Guide Generator
 
-An AI powered study guide creation app powered by the Perplexity API. 
+WonderBot is an AI-powered application that helps students learn faster and more effectively using the Perplexity API.
 
-WonderBot is a generative robot that can help users create a learning guide.
-Nowadays, some people, especially students, find it difficult to learn systematically 
-and informatively through the Internet. What Wonderbot aims to implement is 
-generating a "learning guide" in PDF format that includes a step-by-step leading 
-process, intended to help users start learning more quickly and easily.
+Imagine you’re a college student with a final exam in quantum physics in just three hours. Normally, you’d have to skim through dense textbook chapters, decode complicated jargon, and then spend more time searching for relevant practice problems online—most of which aren’t even useful.
 
-We used the Perplexity API as a search and generation medium. The results are condensed
-into a PDF, which contains all the questions and reading resources that a beginner needs.
-All materials used are based from academic sources, providing high quality materials.
-The icons and interface are user friendly.
+WonderBot solves all of that. Simply tell it what you want to learn. For example:
 
-WonderBot generated PDFs are available to everyone to view and download, as all generated PDFs
-are accessible via the "List" page. This means that one may find previously generated resources,
-which saves them time and effort. 
+```“I want to learn about particle wave duality, quantum entanglement, superconductors, and the measurement problem.”```
 
-An easy form is displayed on the "Create" page, where the user enters a topic prompt, number of exercises,
-and grade level. Perplexity is used to break the topic prompt into the main topic as well as many subtopics.
+The app automatically breaks your prompt into a main topic and subtopics, searches academic sources (MIT, Harvard, Caltech, etc.), and compiles everything into a concise, easy-to-read PDF. Each packet includes textbook-style explanations, key formulas, worked examples, and high-quality practice problems with solutions.
+
+But WonderBot isn’t just for college students—anyone can use it. The material automatically adapts to your education level. For example, if you select “elementary school,” the app will pull sources from kid-friendly sites like Khan Academy and other educational organizations.
+
+All generated PDFs are publicly accessible on the List page, allowing users to revisit or download previously created study guides from themselves or others. With its intuitive interface and intelligent content generation, WonderBot makes studying or exploring new topics faster, clearer, and far more efficient.
 
 Team details:
 
 - YuDong Zhao: Product assistant, database administrator [LinkedIn](https://www.linkedin.com/in/%E6%98%B1%E6%A0%8B-%E8%B5%B5-1ab35138a/)
 - Yubo Wang: Frontend engineer, project manager [LinkedIn](https://www.linkedin.com/in/yubo-wang-b541302b3/)
-- Stanley Hoo: Python backend developer [LinkedIn](https://www.linkedin.com/in/stanley-hoo-a20108331/)
-
+- Stanley Hoo: Python backend developer, API lead [LinkedIn](https://www.linkedin.com/in/stanley-hoo-a20108331/)
 
 Background video by: https://www.pexels.com/@joel-dunn-98388/
 
