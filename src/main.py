@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from perplexity import Perplexity
 from search import search_topic
 
+# Loads environment variables from a .env file
 load_dotenv()
 
 BASE_PATH = pathlib.Path(__file__).parent
@@ -22,7 +23,7 @@ app = Flask(
 )
 API_KEY = os.getenv("PPLX_API_KEY")
 
-
+# Breaks down a sentence into main topic and subtopics
 def breakdown_topics(sentence):
     """
     Uses Perplexity's Sonar-Pro model to extract a main topic and subtopics
@@ -61,14 +62,14 @@ def breakdown_topics(sentence):
     content = response.choices[0].message.content
     return json.loads(content)
 
-
+# Home page
 @app.route("/", methods=["GET", "POST"])
 def home():
     if request.method == "POST":
         print(request.form)
     return render_template("index.html")
 
-
+# Create a learning packet
 @app.route("/create", methods=["POST"])
 def create():
     guide_prompt = request.form.get("guide-prompt")
@@ -93,7 +94,7 @@ def create():
         }
     )
 
-
+# List already generated PDFs in the list view
 @app.route("/list", methods=["POST"])
 def list_pdfs():
     """Lists already generated PDFs"""

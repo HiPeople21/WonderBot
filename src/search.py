@@ -17,7 +17,7 @@ PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-
+# Make sure we have key
 def assert_api_key():
     if not PERPLEXITY_API_KEY or PERPLEXITY_API_KEY.strip() == "":
         raise RuntimeError("PERPLEXITY_API_KEY is missing or empty")
@@ -149,7 +149,7 @@ SYSTEM_MSG = (
     "No links or markdown in ALL fields. Citations ONLY go in the 'citations' field. The citation should ONLY include the link to the source. Return ONLY valid JSON. "
 )
 
-
+# Creates the textbook-style learning packet (textbook part only)
 def find_textbook_packet(
     topic: str,
     subtopics: list[str],
@@ -232,7 +232,7 @@ Prefer openly licensed or university sources where verbatim copying is permitted
 Avoid: paywalled sites, copyrighted textbooks without open licenses, commercial worksheets.
 """
 
-
+# Builds the messsages to query Perplexity Sonar
 def build_messages(topic, subtopics, grade_level, num_problems):
     subtopics_txt = ", ".join(subtopics) if subtopics else "—"
     today = datetime.today().strftime("%Y-%m-%d")
@@ -295,7 +295,7 @@ Important format rules:
 - The array MUST contain exactly {num_problems} items.
 """
 
-    # Optional domain-bias hint inside the last user message improves retrieval quality
+    # Domain-bias hint inside the last user message improves retrieval quality
     domain_bias = (
         "Search hints (you may vary as needed): "
         "site:ocw.mit.edu OR site:web.mit.edu OR site:openstax.org OR site:*.edu filetype:pdf "
@@ -339,7 +339,7 @@ def _validate_items(items, num_expected):
             raise ValueError(f"Item {i} looks paraphrased.")
     return True
 
-
+# Creates practice problems and solutions via Perplexity Sonar web search
 def create_practice_problems(
     topic,
     subtopics,
@@ -406,7 +406,7 @@ def create_practice_problems(
 # ------------------------------------ Formatting ----------------------------------------
 ##########################################################################################
 
-
+# Clean json file
 def json_sanitize(s: str):
     try:
         return json.loads(s)
@@ -420,7 +420,7 @@ def json_sanitize(s: str):
                     pass
     return None
 
-
+# Converts the textbook JSON into markdown format (very rough)
 def textbook_json_to_markdown(packet: dict) -> str:
     md = [f"# {packet.get('title', 'Learning Packet')}\n"]
     md.append(
@@ -471,7 +471,7 @@ def textbook_json_to_markdown(packet: dict) -> str:
         md.append("## Summary\n" + packet["summary"])
     return "\n".join(md)
 
-
+# Use perplixity to fix markdown (attempted but didn't work well)
 def fix_markdown(markdown: str) -> str:
     headers = {
         "accept": "application/json",
@@ -540,7 +540,7 @@ def strip_leading_numbering(text: str) -> str:
 
 MATH_CMDS = r"(vec|frac|cdot|times|ldots|nabla|partial|sqrt|sum|prod|int|lim|log|ln|sin|cos|tan|alpha|beta|gamma|Delta|leq|geq|pm)"
 
-
+# Fix markdown for LaTeX conversion
 def sanitize_markdown_for_latex(md: str) -> str:
     """
     Preflight sanitizer to reduce LaTeX build errors from Pandoc.
@@ -631,7 +631,7 @@ def sanitize_markdown_for_latex(md: str) -> str:
             out.append(t)
     return "".join(out)
 
-
+# Converts markdown to PDF via Pandoc + XeLaTeX
 def markdown_to_pdf(md_text, output_path="output.pdf"):
     header_tex = r"""
 \usepackage{amsmath,amssymb,mathtools}
@@ -669,7 +669,7 @@ def markdown_to_pdf(md_text, output_path="output.pdf"):
         except:
             pass
 
-
+# Use Gemini to really fix markdown since Perplexity didn't work well
 def actually_fix_markdown(md):
     client = genai.Client()
 
@@ -680,7 +680,7 @@ def actually_fix_markdown(md):
 
     return response.text[len("```markdown\n") : -3].strip()
 
-
+# Function that ties everything together
 def search_topic(topic, subtopics, grade_level, num_problems):
     try:
         # Get textbook packet
@@ -739,7 +739,7 @@ def search_topic(topic, subtopics, grade_level, num_problems):
             if isinstance(url, str) and url.strip():
                 problems_sources.append(f"- {url.strip()}")
 
-        # (Optional) de-duplicate identical lines while preserving order
+        # De-duplicate identical lines while preserving order
         seen = set()
         deduped_sources = ["# Sources", ""]
         for line in problems_sources[2:]:
@@ -792,8 +792,6 @@ def search_topic(topic, subtopics, grade_level, num_problems):
 
         open("test.md", "w").write(fixed_packet_md)
 
-        # fixed_packet_md = fixed_packet_md.replace('\\$', '$')
-
         return f'{('_').join(topic.split())}_Packet_for_{'_'.join(grade_level.split())}_{hashed_part}.pdf'
 
     except Exception as e:
@@ -801,5 +799,5 @@ def search_topic(topic, subtopics, grade_level, num_problems):
         return None
 
 
-# Example usage:
+# Test usage:
 # print(search_topic("Civil War", ["Slave Trade", "Abraham Lincoln", "Battle of Gettysburg"], "middle school", 3))
