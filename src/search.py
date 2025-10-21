@@ -29,7 +29,7 @@ def assert_api_key():
 
 
 # Temperature 0.2 for focused, less random output
-def create_lesson(messages, *, temperature=0.2, max_tokens=8000, debug=True):
+def create_lesson(messages, *, temperature=0.2, max_tokens=12000, debug=True):
     assert_api_key()
     headers = {
         "accept": "application/json",
@@ -187,7 +187,7 @@ Return ONLY valid JSON matching this schema (no prose outside JSON):
             {"role": "system", "content": SYSTEM_MSG},
             {"role": "user", "content": user_msg},
         ],
-        max_tokens=8000,
+        max_tokens=12000,
         debug=debug,
     )
     parsed = json_sanitize(content)
@@ -507,14 +507,7 @@ def fix_markdown(markdown: str) -> str:
     r.raise_for_status()
     content = r.json()["choices"][0]["message"]["content"].strip()
 
-    # If model wrapped in fences, strip them safely
-    if content.startswith("```"):
-        first_nl = content.find("\n")
-        last_ticks = content.rfind("```")
-        if first_nl != -1 and last_ticks != -1 and last_ticks > first_nl:
-            content = content[first_nl + 1 : last_ticks].strip()
-
-    return content
+    return content[len("```markdown\n") : -len("```")].strip() if content.startswith("```markdown") else content
 
 
 # Fix numbering
@@ -675,10 +668,10 @@ def actually_fix_markdown(md):
 
     response = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=f"Fix the syntax errors in the following markdown code, return only the markdown code: \n\n{md}",
+        contents=f"Fix the syntax errors in the following markdown code, return only the markdown code, make sure that when '$' signs are enclosing a math equation, there is no space between the '$' and the equation it encloses. For example, '$ x $' is wrong and should be '$x$'.: \n\n{md}",
     )
 
-    return response.text[len("```markdown\n") : -3].strip()
+    return response.text[len("```markdown") : -len("```")].strip() if response.text.startswith("```markdown") else response.text.strip()
 
 # Function that ties everything together
 def search_topic(topic, subtopics, grade_level, num_problems):
@@ -784,13 +777,15 @@ def search_topic(topic, subtopics, grade_level, num_problems):
 
         fixed_packet_md = actually_fix_markdown(packet_md)
 
+        open("test.md", "w").write(fixed_packet_md)
+
         markdown_to_pdf(
             fixed_packet_md,
             output_path=f'{BASE_PATH}/static/pdfs/{'_'.join(topic.split())}_Packet_for_{'_'.join(grade_level.split())}_{hashed_part}.pdf',
         )
         
-
-        open("test.md", "w").write(fixed_packet_md)
+        
+        # fixed_packet_md = fixed_packet_md.replace('\\$', '$')
 
         return f'{('_').join(topic.split())}_Packet_for_{'_'.join(grade_level.split())}_{hashed_part}.pdf'
 
