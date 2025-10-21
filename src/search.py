@@ -777,15 +777,12 @@ def search_topic(topic, subtopics, grade_level, num_problems):
 
         fixed_packet_md = actually_fix_markdown(packet_md)
 
-        open("test.md", "w").write(fixed_packet_md)
+        # open("test.md", "w").write(fixed_packet_md)
 
         markdown_to_pdf(
             fixed_packet_md,
             output_path=f'{BASE_PATH}/static/pdfs/{'_'.join(topic.split())}_Packet_for_{'_'.join(grade_level.split())}_{hashed_part}.pdf',
         )
-        
-        
-        # fixed_packet_md = fixed_packet_md.replace('\\$', '$')
 
         return f'{('_').join(topic.split())}_Packet_for_{'_'.join(grade_level.split())}_{hashed_part}.pdf'
 
