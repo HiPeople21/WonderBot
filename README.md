@@ -14,6 +14,8 @@ But WonderBot isn’t just for college students—anyone can use it. The materia
 
 All generated PDFs are publicly accessible on the List page, allowing users to revisit or download previously created study guides from themselves or others. With its intuitive interface and intelligent content generation, WonderBot makes studying or exploring new topics faster, clearer, and far more efficient.
 
+An example learning packet using the above prompt, 8 questions, and university level parameters can be viewed here: [Quantum Physics Packet](https://github.com/HiPeople21/WonderBot/blob/main/example.pdf)
+
 Team details:
 
 - YuDong Zhao: Product assistant, database administrator [LinkedIn](https://www.linkedin.com/in/%E6%98%B1%E6%A0%8B-%E8%B5%B5-1ab35138a/)
