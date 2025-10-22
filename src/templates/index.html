@@ -17,6 +17,16 @@
 	</head>
 	<body class="is-preload">
 
+		<div id="flash-container" aria-live="polite" aria-atomic="true"></div>
+
+		<!-- Logout button -->
+		{% if logged_in %}
+		<div id="userbar" class="userbar">
+			<span class="welcome">Welcome {{ username }}!</span>
+			<a href="#" id="logout-btn" class="logout-btn">Logout</a>
+		</div>
+		{% endif %}
+
 		<!-- Wrapper -->
 			<div id="wrapper">
 
@@ -32,10 +42,20 @@
 							</div>
 						</div>
 						<nav>
-							<ul>
+							<ul class="site-nav">
 								<li><a href="#create">Create</a></li>
-								<li><a href="#list">List</a></li>
-								<li style="display: none"><a href="#viewer"></a></li>
+
+								<!-- spacer to push the line to the right when logged in -->
+								{% if logged_in %}
+								<li class="mylist"><a href="#my-list">My List</a></li>
+								<li><a href="#list-all">All</a></li>
+								{% else %}
+								<li><a href="#list-all">All</a></li>
+								<li><a href="#login">Login</a></li>
+								<li><a href="#register">Register</a></li>
+								{% endif %}
+
+								<li style="display:none"><a href="#viewer"></a></li>
 							</ul>
 						</nav>
 					</header>
@@ -61,6 +81,8 @@
                                                 <option value="middle-school">Middle School</option>
                                                 <option value="high-school">High School</option>
                                                 <option value="university">University</option>
+												<option value="post-doc">Post-Doc</option>
+												<option value="casual">Casual</option>
                                             </select>
 										</div>
 									</div>
@@ -71,7 +93,8 @@
 								</form>
                             </article>
 
-							<article id="list">
+							<!-- My List (Private)-->
+							<article id="my-list">
 								<h2 class="major">List</h2>
 								<div class="fields">
 									<div class="field">
@@ -88,24 +111,83 @@
 								</div>
                             </article>
 
-							<article id="viewer">
-								<h2 class="major">Viewer</h2>
-								<div class="pdf-container">
-									<embed
-										src=""
-										type="application/pdf"
-										frameBorder="0"
-										scrolling="auto"
-										height="100%"
-										width="100%"
-										id="pdf"
-										allowFullscreen
-									></embed>
-								</div>
+							<!-- Login -->
+							<article id="login">
+								<h2 class="major">Login</h2>
+								<form method="post" action="/login" id="login-form">
+									<div class="fields">
+										<div class="field">
+											<label for="username">Username</label>
+											<input type="text" name="username" id="username" required />
+										</div>
+										<div class="field">
+											<label for="password">Password</label>
+											<input type="password" name="password" id="password" required />
+										</div>
+									</div>
+									<ul class="actions">
+										<li><input type="submit" value="Login" class="primary" /></li>
+									</ul>
+								</form>
 							</article>
 
-						
+							<!-- Register -->
+							<article id="register">
+								<h2 class="major">Register</h2>
+								<form method="post" action="/register" id="register-form">
+									<div class="fields">
+										<div class="field">
+											<label for="reg-username">Username</label>
+											<input type="text" name="username" id="reg-username" required />
+										</div>
+										<div class="field">
+											<label for="reg-password">Password</label>
+											<input type="password" name="password" id="reg-password" required />
+										</div>
+										<div class="field">
+											<label for="reg-email">Email</label>
+											<input type="email" name="email" id="reg-email" required />
+										</div>
+									</div>
+									<ul class="actions">
+										<li><input type="submit" value="Register" class="primary" /></li>
+									</ul>
+								</form>
+							</article>
 
+							<!-- All Lists (Public) -->
+							<article id="list-all">
+							<h2 class="major">All</h2>
+							<div class="fields">
+								<div class="field">
+								<label for="search-input-all">Search public packets</label>
+								<input type="text" id="search-input-all" placeholder="e.g., vectors, dinosaurs, grammar" />
+								</div>
+							</div>
+							<div class="table-wrapper">
+								<table>
+								<tbody id="pdfs-list-all"></tbody>
+								</table>
+							</div>
+							</article>
+
+							<!-- Viewer (Both) -->
+							<article id="viewer" class="fullscreen-viewer">
+							<h2 class="major" id="viewer-title">
+								Viewer
+								<a href="#" id="viewer-close" aria-label="Close" style="float:right;">✕</a>
+							</h2>
+							<div class="pdf-container">
+								<embed
+								src=""
+								type="application/pdf"
+								frameBorder="0"
+								scrolling="auto"
+								id="pdf"
+								allowfullscreen
+								/>
+							</div>
+							</article>
 					</div>
 
 				<!-- Footer -->
@@ -130,6 +212,297 @@
 			<script src="{{ url_for("static", filename="assets/js/breakpoints.min.js")}}"></script>
 			<script src="{{ url_for("static", filename="assets/js/util.js")}}"></script>
 			<script src="{{ url_for("static", filename="assets/js/main.js")}}"></script>
+			<script>
+				window.LOGGED_IN = {{ 'true' if logged_in else 'false' }};
+			</script>
+			<script>
+				// --- Login / Register / Logout Handlers ---
+				document.getElementById("login-form").addEventListener("submit", async (e) => {
+				e.preventDefault();
+				const formData = new FormData(e.target);
+				const {data} = await fetchJSON("/login", { method: "POST", body: formData });
+				if (data.status === "success") {
+					queueFlash([{ category: "success", message: data.message || "Login successful." }]);
+					sessionStorage.setItem("returnToHash", "#");
+					location.reload();
+				}
+				});
+
+				document.getElementById("logout-btn")?.addEventListener("click", async (e) => {
+				e.preventDefault();
+				const {data} = await fetchJSON("/logout");
+				if (data.status === "success") {
+					queueFlash([{ category: "success", message: data.message || "Logged out successfully." }]);
+					sessionStorage.setItem("returnToHash", "#");
+					location.reload();
+				}
+				});
+
+				document.getElementById("register-form").addEventListener("submit", async (e) => {
+				e.preventDefault();
+				const formData = new FormData(e.target);
+				const {data} = await fetchJSON("/register", { method: "POST", body: formData });
+				if (data.status === "success") location.hash = "#login";
+				});
+
+				// --- Flash Message System ---
+				function showFlash(category, message, {timeout=5000} = {}) {
+				const container = document.getElementById('flash-container');
+				if (!container) return;
+
+				const el = document.createElement('div');
+				el.className = `flash-message ${category || 'info'}`;
+				el.role = 'status';
+				el.innerHTML = `
+					<span>${message}</span>
+					<span class="flash-close" aria-label="Close" title="Close">&times;</span>
+				`;
+				container.appendChild(el);
+
+				// animate in
+				requestAnimationFrame(() => el.classList.add('show'));
+
+				// close button
+				el.querySelector('.flash-close').addEventListener('click', () => removeFlash(el));
+
+				// auto-hide
+				if (timeout > 0) setTimeout(() => removeFlash(el), timeout);
+				}
+
+				// Remove flash message after certain amount of time
+				function removeFlash(el){
+				el.classList.remove('show');
+				setTimeout(() => el.remove(), 200);
+				}
+				// Fetch JSON helper with flash message support
+				async function fetchJSON(url, opts){
+					const res = await fetch(url, opts);
+					const data = await res.json().catch(() => ({}));
+					// Show any flash messages from the response
+					if (Array.isArray(data.flash)) {
+						for (const f of data.flash) showFlash(f.category || 'info', f.message || '');
+					} else if (data.message && data.status) {
+						// Fallback to single message
+						const cat = (data.status === 'success') ? 'success' :
+									(data.status === 'error')   ? 'error'   : 'info';
+						showFlash(cat, data.message);
+					}
+
+					return {res, data};
+				}
+
+				// Queue flash messages to show on next page load
+				function queueFlash(items){
+					sessionStorage.setItem('pendingFlash', JSON.stringify(items));
+				}
+				function playQueuedFlash(){
+					const raw = sessionStorage.getItem('pendingFlash');
+					if (!raw) return;
+					try {
+						const arr = JSON.parse(raw);
+						if (Array.isArray(arr)) arr.forEach(f => showFlash(f.category || 'info', f.message || ''));
+					} catch (_) {}
+					sessionStorage.removeItem('pendingFlash');
+				}
+
+				// On page load, play any queued flash messages
+				window.addEventListener("pageshow", () => {
+					playQueuedFlash(); 
+					const desired = sessionStorage.getItem("returnToHash");
+					if (desired) {
+						location.hash = desired;
+						sessionStorage.removeItem("returnToHash");
+					} else if (location.hash !== "#") {
+						location.hash = "#";
+					}
+				});
+
+				// --- PDF List Loading & Searching ---
+				function openViewer(filename, displayName){
+					const viewer = document.getElementById("viewer");
+					const title  = document.getElementById("viewer-title");
+					const embed  = document.getElementById("pdf");
+					if (!embed) return;
+
+					embed.src = `static/pdfs/${filename}`;
+					if (title && displayName) title.textContent = displayName;
+					location.hash = "#viewer";
+				}
+
+				// Toggle publish/unpublish PDF button
+				async function togglePublish(id, isPublic) {
+					const formData = new FormData();
+					formData.append("packet_id", id);
+					formData.append("is_public", isPublic ? 1 : 0);
+
+					const { data } = await fetchJSON("/update_visibility", {
+						method: "POST",
+						body: formData
+					});
+
+					if (data.status === "success") {
+						// showFlash("success", data.message);
+						return true;
+					} else {
+						showFlash("error", data.message || "Failed to update visibility.");
+						return false;
+					}
+				}
+
+				async function loadMyList() {
+					const body = new FormData();
+					const { data } = await fetchJSON("/list_user", { method: "POST", body });
+					const tbody = document.getElementById("pdfs-list");
+					if (!tbody) return;
+					tbody.innerHTML = "";
+
+					if (data.status === "success" && Array.isArray(data.items)) {
+						data.items.forEach(item => {
+							const tr = document.createElement("tr");
+							tr.innerHTML = `
+							<td style="width:100%;">
+								<a href="#" class="open-pdf" data-file="${item.filename}" data-name="${item.name}">
+									${item.name}
+								</a>
+							</td>
+							<td style="white-space:nowrap; text-align:right;">
+								<button type="button"
+										class="publish-btn"
+										data-id="${item.id}"
+										data-public="${item.is_public ? 1 : 0}">
+								${item.is_public ? "Unpublish" : "Publish"}
+								</button>
+							</td>
+							`;
+							tbody.appendChild(tr);
+						});
+
+						tbody.querySelectorAll("a.open-pdf").forEach(a => {
+							a.addEventListener("click", (e) => {
+								e.preventDefault();
+								openViewer(a.dataset.file, a.dataset.name);
+							});
+						});
+
+						// Delegate clicks: open viewer
+						tbody.querySelectorAll("button.publish-btn").forEach(btn => {
+							btn.addEventListener("click", async () => {
+								const id  = Number(btn.dataset.id);
+								const cur = btn.dataset.public === "1";
+								const isPublishing = !cur;
+
+								btn.classList.add(isPublishing ? "publishing" : "unpublishing");
+								btn.disabled = true;
+
+								const success = await togglePublish(id, isPublishing);
+
+								if (success) {
+								btn.dataset.public = isPublishing ? "1" : "0";
+								btn.textContent = isPublishing ? "Unpublish" : "Publish";
+								}
+
+								setTimeout(() => {
+								btn.classList.remove("publishing", "unpublishing");
+								btn.disabled = false;
+								}, 800);
+							});
+						});
+					}
+				}
+
+				// Basically same thing but for public list
+				async function loadAllList() {
+					const res = await fetch("/list_public");
+					const data = await res.json();
+					const tbody = document.getElementById("pdfs-list-all");
+					if (!tbody) return;
+					tbody.innerHTML = "";
+
+					if (data.status === "success" && Array.isArray(data.items)) {
+						data.items.forEach(item => {
+						const tr = document.createElement("tr");
+						tr.innerHTML = `
+							<td>
+							<a href="#" class="open-pdf" data-file="${item.filename}" data-name="${item.name}">
+								${item.name}
+							</a>
+							</td>
+						`;
+						tbody.appendChild(tr);
+						});
+
+						tbody.querySelectorAll("a.open-pdf").forEach(a => {
+							a.addEventListener("click", (e) => {
+								e.preventDefault();
+								openViewer(a.dataset.file, a.dataset.name);
+							});
+						});
+					}
+				}
+
+				// Open PDF in viewer
+				function openViewer(filename, displayName){
+					const viewer = document.getElementById("viewer");
+					const title  = document.getElementById("viewer-title");
+					const embed  = document.getElementById("pdf");
+					if (!embed) return;
+
+					embed.src = `static/pdfs/${filename}`;
+					if (title && displayName) title.textContent = displayName;
+
+					// enable fullscreen layout
+					document.body.classList.add('viewer-open');
+					location.hash = "#viewer";
+				}
+
+				// Leave fullscreen when navigating away from #viewer
+				function syncViewerClass() {
+					if ((location.hash || "#").toLowerCase() === "#viewer") {
+						document.body.classList.add('viewer-open');
+					} else {
+						document.body.classList.remove('viewer-open');
+					}
+				}
+				window.addEventListener("hashchange", syncViewerClass);
+				window.addEventListener("pageshow", syncViewerClass);
+
+				// Goes back to default since same viewer for both
+				document.getElementById('viewer-close')?.addEventListener('click', (e) => {
+					e.preventDefault();
+					const embed = document.getElementById('pdf');
+					if (embed) embed.src = '';
+					location.hash = '#'; 
+					document.body.classList.remove('viewer-open');
+				});
+
+				/* Load proper list when user navigates */
+				function handleHashLoad() {
+					const h = (location.hash || "#").toLowerCase();
+					if (h === "#my-list" && window.LOGGED_IN) {
+						loadMyList();
+					}
+					if (h === "#list-all") {
+						loadAllList();
+					}
+					}
+
+					window.addEventListener("hashchange", handleHashLoad);
+					document.addEventListener("DOMContentLoaded", handleHashLoad);
+					
+					// Search filtering
+					document.getElementById("search-input")?.addEventListener("input", (e) => {
+					const q = e.target.value.trim().toLowerCase();
+					document.querySelectorAll("#pdfs-list tr").forEach(tr => {
+						tr.style.display = tr.textContent.toLowerCase().includes(q) ? "" : "none";
+					});
+					});
+					document.getElementById("search-input-all")?.addEventListener("input", (e) => {
+					const q = e.target.value.trim().toLowerCase();
+					document.querySelectorAll("#pdfs-list-all tr").forEach(tr => {
+						tr.style.display = tr.textContent.toLowerCase().includes(q) ? "" : "none";
+					});
+				});
+			</script>
 
 	</body>
 </html>

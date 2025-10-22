@@ -8,6 +8,7 @@ from datetime import datetime
 import re
 import pypandoc
 from google import genai
+from flask import session
 
 load_dotenv()
 
@@ -771,9 +772,15 @@ def search_topic(topic, subtopics, grade_level, num_problems):
             + sources_md
         )
 
-        hashed_part = sha256(
-            datetime.now().strftime("%d/%m/%YT%H:%M:%S").encode("utf-8")
-        ).hexdigest()
+        # Hash for unique filename
+        if 'user_id' in session:
+            user_part = str(session['user_id'])
+        else:
+            user_part = "anon"
+
+        stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+        seed_bytes = f"{user_part}:{stamp}".encode("utf-8")
+        hashed_part = sha256(seed_bytes).hexdigest()
 
         fixed_packet_md = actually_fix_markdown(packet_md)
 
@@ -781,10 +788,10 @@ def search_topic(topic, subtopics, grade_level, num_problems):
 
         markdown_to_pdf(
             fixed_packet_md,
-            output_path=f'{BASE_PATH}/static/pdfs/{'_'.join(topic.split())}_Packet_for_{'_'.join(grade_level.split())}_{hashed_part}.pdf',
+            output_path=f'{BASE_PATH}/static/pdfs/{hashed_part}.pdf',
         )
 
-        return f'{('_').join(topic.split())}_Packet_for_{'_'.join(grade_level.split())}_{hashed_part}.pdf'
+        return f'{hashed_part}.pdf'
 
     except Exception as e:
         print("\n[FATAL]", e)
