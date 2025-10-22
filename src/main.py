@@ -18,15 +18,13 @@ from database import *
 load_dotenv()
 
 app = Flask(__name__, static_folder="static")
-app.secret_key = os.environ.get("SECRET_KEY")
+app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32)
 
 # Sets up database
 create_db()
 
 BASE_PATH = pathlib.Path(__file__).parent
 pdfs_dir = BASE_PATH / "static/pdfs"
-
-API_KEY = os.getenv("PPLX_API_KEY")
 
 # Breaks down a sentence into main topic and subtopics
 def breakdown_topics(sentence):
@@ -145,6 +143,8 @@ def create():
             )
     except Exception as e:
         return jsonify({"status": "error", "message": f"Error saving learning packet: {str(e)}"}), 500
+    
+    packet_name = f"{main_topic} ({grade_level})"
 
     # Return JSON so the frontend can handle it directly
     return jsonify(
@@ -154,6 +154,7 @@ def create():
             "pdf_path": pdf_path,
             "main_topic": main_topic,
             "subtopics": subtopics,
+            "name": packet_name,
         }
     )
 

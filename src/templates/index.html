@@ -47,11 +47,11 @@
 
 								<!-- spacer to push the line to the right when logged in -->
 								{% if logged_in %}
-								<li class="mylist"><a href="#my-list">My List</a></li>
+								<li class="mylist"><a href="#my-list">My Lists</a></li>
 								<li><a href="#list-all">All</a></li>
 								{% else %}
 								<li><a href="#list-all">All</a></li>
-								<li><a href="#login">Login</a></li>
+								<li><a href="#login">Log in</a></li>
 								<li><a href="#register">Register</a></li>
 								{% endif %}
 
@@ -77,12 +77,12 @@
                                         <div class="field half">
 											<label for="grade-level">Grade Level</label>
 											<select name="grade-level" id="grade-level">
-                                                <option value="elementary">Elementary</option>
-                                                <option value="middle-school">Middle School</option>
-                                                <option value="high-school">High School</option>
-                                                <option value="university">University</option>
-												<option value="post-doc">Post-Doc</option>
-												<option value="casual">Casual</option>
+                                                <option value="Elementary">Elementary</option>
+                                                <option value="Middle-school">Middle School</option>
+                                                <option value="High-school">High School</option>
+                                                <option value="University">University</option>
+												<option value="Post-doc">Post-Doc</option>
+												<option value="Casual">Casual</option>
                                             </select>
 										</div>
 									</div>
@@ -488,7 +488,7 @@
 
 					window.addEventListener("hashchange", handleHashLoad);
 					document.addEventListener("DOMContentLoaded", handleHashLoad);
-					
+
 					// Search filtering
 					document.getElementById("search-input")?.addEventListener("input", (e) => {
 					const q = e.target.value.trim().toLowerCase();
