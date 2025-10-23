@@ -17,6 +17,7 @@ Beyond individual learning, **WonderBot is built around community-driven educati
 By sharing resources, students and enthusiastic learners around the world can collaborate, discover new topics, and contribute to an ever-growing network of high-quality study materials. With its intuitive interface and AI-powered learning engine, WonderBot turns studying into a collective experience—making education faster, clearer, and more connected.
 
 Live site can be viewed [here](https://wonderbot.stanleyhoo1.tech/).
+
 ---
 
 ### **An example learning packet using the above prompt, 8 questions, and university level parameters can be viewed here: [Quantum Physics Packet](https://github.com/HiPeople21/WonderBot/blob/main/example.pdf)**
