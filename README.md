@@ -15,6 +15,8 @@ But WonderBot isn’t just for college students—anyone can use it. The materia
 Beyond individual learning, **WonderBot is built around community-driven education**. All generated PDFs are stored on your personal My Lists page, where users can revisit or download their past study guides. You can also publish your PDFs to the shared WonderBot library, allowing other learners to explore, download, and build upon the guides you’ve created.
 
 By sharing resources, students and enthusiastic learners around the world can collaborate, discover new topics, and contribute to an ever-growing network of high-quality study materials. With its intuitive interface and AI-powered learning engine, WonderBot turns studying into a collective experience—making education faster, clearer, and more connected.
+
+Live site can be viewed [here](https://wonderbot.stanleyhoo1.tech/).
 ---
 
 ### **An example learning packet using the above prompt, 8 questions, and university level parameters can be viewed here: [Quantum Physics Packet](https://github.com/HiPeople21/WonderBot/blob/main/example.pdf)**
